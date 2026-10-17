@@ -35,6 +35,19 @@ SUMMARY: dict[str, Any] = {
             {"id": 1, "name": "Courses", "is_main": True, "counts": {"total": 2}, "stale": False},
         ],
     },
+    "orders": {
+        "awaiting_pickup": 1,
+        "pickup_due": False,
+        "next": {
+            "id": 12,
+            "order_number": "0012345999",
+            "ordered_at": "2026-10-13T18:40:00+02:00",
+            "pickup_at": "2026-10-14T10:00:00+02:00",
+            "pickup_until": "2026-10-14T11:00:00+02:00",
+            "lines_count": 14,
+            "total": "63.82",
+        },
+    },
     "low_stock": [{"product_id": 5, "name": "Lait", "quantity": "0.000", "min_stock": "2.000", "unit": "pièce"}],
     "expiring": [
         {

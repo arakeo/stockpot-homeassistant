@@ -60,6 +60,9 @@
     "binary_sensor": {
       "drive_order_due": {
         "name": "Drive order to place"
+      },
+      "order_to_collect": {
+        "name": "Drive order to collect"
       }
     },
     "calendar": {
