@@ -1,0 +1,177 @@
+consume_product:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: stockpot
+    ean:
+      example: "3033490004743"
+      selector:
+        text:
+    product_id:
+      selector:
+        number:
+          min: 1
+          mode: box
+    quantity:
+      example: 1
+      selector:
+        number:
+          min: 0.001
+          step: any
+          mode: box
+    unit_id:
+      selector:
+        number:
+          min: 1
+          mode: box
+    location_id:
+      selector:
+        number:
+          min: 1
+          mode: box
+
+add_stock:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: stockpot
+    ean:
+      example: "3033490004743"
+      selector:
+        text:
+    product_id:
+      selector:
+        number:
+          min: 1
+          mode: box
+    quantity:
+      example: 1
+      selector:
+        number:
+          min: 0.001
+          step: any
+          mode: box
+    unit_id:
+      selector:
+        number:
+          min: 1
+          mode: box
+    location_id:
+      selector:
+        number:
+          min: 1
+          mode: box
+    best_before:
+      selector:
+        date:
+
+add_to_shopping_list:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: stockpot
+    label:
+      example: "Pain"
+      selector:
+        text:
+    ean:
+      selector:
+        text:
+    product_id:
+      selector:
+        number:
+          min: 1
+          mode: box
+    quantity:
+      selector:
+        number:
+          min: 0.001
+          step: any
+          mode: box
+    unit_id:
+      selector:
+        number:
+          min: 1
+          mode: box
+    note:
+      selector:
+        text:
+    list_id:
+      selector:
+        number:
+          min: 1
+          mode: box
+
+plan_meal:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: stockpot
+    date:
+      required: true
+      selector:
+        date:
+    meal_type:
+      required: true
+      selector:
+        select:
+          translation_key: meal_type
+          options:
+            - breakfast
+            - lunch
+            - snack
+            - dinner
+    recipe_id:
+      selector:
+        number:
+          min: 1
+          mode: box
+    note:
+      example: "Pizza maison"
+      selector:
+        text:
+    servings:
+      selector:
+        number:
+          min: 0.5
+          max: 99
+          step: 0.5
+          mode: box
+
+cook_meal:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: stockpot
+    entry_id:
+      selector:
+        number:
+          min: 1
+          mode: box
+    date:
+      selector:
+        date:
+    meal_type:
+      selector:
+        select:
+          translation_key: meal_type
+          options:
+            - breakfast
+            - lunch
+            - snack
+            - dinner
+
+generate_shopping_list:
+  fields:
+    config_entry_id:
+      selector:
+        config_entry:
+          integration: stockpot
+    until:
+      selector:
+        date:

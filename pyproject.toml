@@ -1,0 +1,24 @@
+# Development tooling of the Stockpot Home Assistant integration (not a package).
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+filterwarnings = ["ignore::DeprecationWarning"]
+
+[tool.ruff]
+target-version = "py314"
+line-length = 120
+extend-exclude = ["examples"]
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "ASYNC", "RUF"]
+ignore = ["RUF001", "RUF002", "RUF003"]
+
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+known-first-party = ["custom_components", "tests"]
+combine-as-imports = true
+section-order = ["future", "standard-library", "third-party", "homeassistant", "first-party", "local-folder"]
+
+[tool.ruff.lint.isort.sections]
+homeassistant = ["homeassistant", "pytest_homeassistant_custom_component"]

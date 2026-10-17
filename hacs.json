@@ -1,0 +1,6 @@
+{
+  "name": "Stockpot",
+  "homeassistant": "2026.10.0",
+  "render_readme": true,
+  "country": ["FR"]
+}

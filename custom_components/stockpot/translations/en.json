@@ -1,0 +1,353 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Stockpot",
+        "description": "Connect a Stockpot instance with a token having the « ha » ability (Stockpot > Settings > Home Assistant). The token is bound to one household.",
+        "data": {
+          "url": "URL",
+          "token": "API token",
+          "verify_ssl": "Verify the SSL certificate"
+        },
+        "data_description": {
+          "url": "Address of Stockpot, e.g. https://stockpot.arakeo.com",
+          "token": "Shown once when created in Stockpot.",
+          "verify_ssl": "Disable only for a self-signed certificate on your network."
+        }
+      },
+      "household": {
+        "title": "Household",
+        "description": "Choose the household to show in Home Assistant.",
+        "data": {
+          "household_id": "Household"
+        }
+      },
+      "reauth_confirm": {
+        "title": "New token",
+        "description": "The token of {url} no longer works. Create a new one with the « ha » ability.",
+        "data": {
+          "token": "API token"
+        }
+      },
+      "reconfigure": {
+        "title": "Stockpot",
+        "description": "Change the address, the token or the SSL check.",
+        "data": {
+          "url": "URL",
+          "token": "API token",
+          "verify_ssl": "Verify the SSL certificate"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Cannot reach Stockpot.",
+      "ssl_error": "The TLS certificate of Stockpot was refused. Check the URL, or disable the SSL check for a self-signed certificate.",
+      "invalid_auth": "Invalid, revoked or expired token.",
+      "missing_ability": "This token does not have the « ha » ability. Create one in Stockpot > Settings > Home Assistant.",
+      "two_factor_required": "This household requires two-factor authentication: enable it on the token's account.",
+      "household_forbidden": "This token is bound to another household, or the account is not a member of it.",
+      "no_household": "This account has no household.",
+      "unknown": "Unexpected error."
+    },
+    "abort": {
+      "already_configured": "This household is already configured.",
+      "reauth_successful": "Token updated.",
+      "reconfigure_successful": "Configuration updated.",
+      "wrong_instance": "This token belongs to another Stockpot instance or household: add it as a new integration."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "drive_order_due": {
+        "name": "Drive order to place"
+      }
+    },
+    "calendar": {
+      "meals": {
+        "name": "Meals"
+      },
+      "meals_breakfast": {
+        "name": "Breakfast"
+      },
+      "meals_lunch": {
+        "name": "Lunch"
+      },
+      "meals_snack": {
+        "name": "Snack"
+      },
+      "meals_dinner": {
+        "name": "Dinner"
+      }
+    },
+    "sensor": {
+      "to_buy": {
+        "name": "Items to buy",
+        "unit_of_measurement": "items"
+      },
+      "low_stock": {
+        "name": "Low stock",
+        "unit_of_measurement": "items"
+      },
+      "expiring": {
+        "name": "Expiring soon",
+        "unit_of_measurement": "items"
+      },
+      "next_meal": {
+        "name": "Next meal"
+      }
+    },
+    "todo": {
+      "main_shopping_list": {
+        "name": "Shopping list"
+      }
+    }
+  },
+  "exceptions": {
+    "invalid_auth": {
+      "message": "Invalid, revoked or expired token."
+    },
+    "missing_ability": {
+      "message": "This token does not have the « ha » ability. Create one in Stockpot > Settings > Home Assistant."
+    },
+    "cannot_connect": {
+      "message": "Cannot reach Stockpot: {error}"
+    },
+    "api_error": {
+      "message": "Stockpot refused the action: {error}"
+    },
+    "item_not_found": {
+      "message": "Line {uid} is no longer on the list."
+    },
+    "already_received": {
+      "message": "This line is already put away in the stock: it cannot be unchecked."
+    },
+    "product_rename": {
+      "message": "A catalogue product is renamed in Stockpot, not from the list."
+    },
+    "no_entry": {
+      "message": "No loaded Stockpot household."
+    },
+    "several_entries": {
+      "message": "Several Stockpot households: choose one (config_entry_id)."
+    },
+    "quantity_required": {
+      "message": "Give a quantity with a product ID."
+    },
+    "product_required": {
+      "message": "Give a barcode or a product ID."
+    },
+    "item_required": {
+      "message": "Give a free text, a barcode or a product ID."
+    },
+    "meal_type_inactive": {
+      "message": "This meal is not planned in the household."
+    },
+    "meal_required": {
+      "message": "Give a recipe or a note."
+    },
+    "meal_reference_required": {
+      "message": "Give the meal ID, or its date and meal."
+    },
+    "meal_not_found": {
+      "message": "No meal left to cook at that date."
+    },
+    "household_forbidden": {
+      "message": "This token is not allowed on this household (token bound to another household, or account no longer a member)."
+    },
+    "two_factor_required": {
+      "message": "This household requires two-factor authentication: enable it on the token's account."
+    }
+  },
+  "selector": {
+    "meal_type": {
+      "options": {
+        "breakfast": "Breakfast",
+        "lunch": "Lunch",
+        "snack": "Snack",
+        "dinner": "Dinner"
+      }
+    },
+    "todo_description": {
+      "options": {
+        "for": "For:",
+        "low_stock": "Low stock"
+      }
+    },
+    "calendar_description": {
+      "options": {
+        "servings": "{servings} servings",
+        "decimal_separator": "."
+      }
+    }
+  },
+  "services": {
+    "consume_product": {
+      "name": "Consume a product",
+      "description": "Takes a product out of the stock (by barcode or product), oldest expiry first.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Household",
+          "description": "Stockpot household (only needed with several households)"
+        },
+        "ean": {
+          "name": "Barcode",
+          "description": "EAN of a product of the household; the quantity is then a number of packs."
+        },
+        "product_id": {
+          "name": "Product ID",
+          "description": "Stockpot product (instead of a barcode)."
+        },
+        "quantity": {
+          "name": "Quantity",
+          "description": "Packs with a barcode (default 1), otherwise in the product's base unit or in the given unit."
+        },
+        "unit_id": {
+          "name": "Unit ID",
+          "description": "Unit of the quantity (converted by Stockpot)."
+        },
+        "location_id": {
+          "name": "Location ID",
+          "description": "Fridge, freezer… (default: the product's)."
+        }
+      }
+    },
+    "add_stock": {
+      "name": "Add to stock",
+      "description": "Adds a new lot of a product to the stock.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Household",
+          "description": "Stockpot household (only needed with several households)"
+        },
+        "ean": {
+          "name": "Barcode",
+          "description": "EAN of a product of the household; the quantity is then a number of packs."
+        },
+        "product_id": {
+          "name": "Product ID",
+          "description": "Stockpot product (instead of a barcode)."
+        },
+        "quantity": {
+          "name": "Quantity",
+          "description": "Packs with a barcode (default 1), otherwise in the product's base unit or in the given unit."
+        },
+        "unit_id": {
+          "name": "Unit ID",
+          "description": "Unit of the quantity (converted by Stockpot)."
+        },
+        "location_id": {
+          "name": "Location ID",
+          "description": "Fridge, freezer… (default: the product's)."
+        },
+        "best_before": {
+          "name": "Best before",
+          "description": "Expiry date of the new lot."
+        }
+      }
+    },
+    "add_to_shopping_list": {
+      "name": "Add to shopping list",
+      "description": "Adds a product or a free text line to a shopping list.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Household",
+          "description": "Stockpot household (only needed with several households)"
+        },
+        "label": {
+          "name": "Free text",
+          "description": "Line without catalogue product."
+        },
+        "ean": {
+          "name": "Barcode",
+          "description": "EAN of a product of the household; the quantity is then a number of packs."
+        },
+        "product_id": {
+          "name": "Product ID",
+          "description": "Stockpot product (instead of a barcode)."
+        },
+        "quantity": {
+          "name": "Quantity",
+          "description": "Packs with a barcode (default 1), otherwise in the product's base unit or in the given unit."
+        },
+        "unit_id": {
+          "name": "Unit ID",
+          "description": "Unit of the quantity (converted by Stockpot)."
+        },
+        "note": {
+          "name": "Note",
+          "description": "Note of the line or of the meal."
+        },
+        "list_id": {
+          "name": "List ID",
+          "description": "Default: the main list."
+        }
+      }
+    },
+    "plan_meal": {
+      "name": "Plan a meal",
+      "description": "Plans a recipe or a note for a meal.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Household",
+          "description": "Stockpot household (only needed with several households)"
+        },
+        "date": {
+          "name": "Date",
+          "description": "Day of the meal."
+        },
+        "meal_type": {
+          "name": "Meal",
+          "description": "Breakfast, lunch, snack or dinner."
+        },
+        "recipe_id": {
+          "name": "Recipe ID",
+          "description": "Recipe to plan (or a note)."
+        },
+        "note": {
+          "name": "Note",
+          "description": "Note of the line or of the meal."
+        },
+        "servings": {
+          "name": "Servings",
+          "description": "Default: computed from the people present."
+        }
+      }
+    },
+    "cook_meal": {
+      "name": "Mark a meal as cooked",
+      "description": "Marks a planned meal as cooked; Stockpot takes its ingredients out of the stock.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Household",
+          "description": "Stockpot household (only needed with several households)"
+        },
+        "entry_id": {
+          "name": "Meal ID",
+          "description": "Planned meal (or date + meal)."
+        },
+        "date": {
+          "name": "Date",
+          "description": "Day of the meal."
+        },
+        "meal_type": {
+          "name": "Meal",
+          "description": "Breakfast, lunch, snack or dinner."
+        }
+      }
+    },
+    "generate_shopping_list": {
+      "name": "Update the shopping list",
+      "description": "Recomputes the main shopping list from the planning and the stock.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Household",
+          "description": "Stockpot household (only needed with several households)"
+        },
+        "until": {
+          "name": "Until",
+          "description": "End of the period covered (default: until the next Drive order)."
+        }
+      }
+    }
+  }
+}

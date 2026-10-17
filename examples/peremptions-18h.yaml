@@ -1,0 +1,23 @@
+# Automatisation : notification des péremptions proches tous les jours à 18 h.
+alias: "Stockpot — péremptions à 18 h"
+mode: single
+triggers:
+  - trigger: time
+    at: "18:00:00"
+conditions:
+  - condition: numeric_state
+    entity_id: sensor.foyer_martin_peremptions_proches
+    above: 0
+actions:
+  - action: notify.mobile_app_telephone_de_camille
+    data:
+      title: "⏳ À utiliser vite"
+      message: >-
+        {% set produits = state_attr('sensor.foyer_martin_peremptions_proches', 'products') %}
+        {% for p in produits %}
+        {{ p.name }} ({{ p.quantity | float | round(1) }} {{ p.unit }}) —
+        {% if p.days_left < 0 %}périmé{% elif p.days_left == 0 %}aujourd'hui{% else %}dans {{ p.days_left }} j{% endif %}
+        {% endfor %}
+      data:
+        # Ouvre Stockpot dans le navigateur du téléphone (session Stockpot existante).
+        url: "https://stockpot.arakeo.com/stock?soon=1"

@@ -1,0 +1,353 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Stockpot",
+        "description": "Connectez une instance Stockpot avec un jeton ayant la capacité « ha » (Stockpot > Réglages > Home Assistant). Le jeton est lié à un foyer.",
+        "data": {
+          "url": "URL",
+          "token": "Jeton d'API",
+          "verify_ssl": "Vérifier le certificat SSL"
+        },
+        "data_description": {
+          "url": "Adresse de Stockpot, ex. https://stockpot.arakeo.com",
+          "token": "Affiché une seule fois à sa création dans Stockpot.",
+          "verify_ssl": "À désactiver seulement pour un certificat auto-signé sur votre réseau."
+        }
+      },
+      "household": {
+        "title": "Foyer",
+        "description": "Choisissez le foyer à afficher dans Home Assistant.",
+        "data": {
+          "household_id": "Foyer"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Nouveau jeton",
+        "description": "Le jeton de {url} ne fonctionne plus. Créez-en un nouveau avec la capacité « ha ».",
+        "data": {
+          "token": "Jeton d'API"
+        }
+      },
+      "reconfigure": {
+        "title": "Stockpot",
+        "description": "Modifiez l'adresse, le jeton ou la vérification SSL.",
+        "data": {
+          "url": "URL",
+          "token": "Jeton d'API",
+          "verify_ssl": "Vérifier le certificat SSL"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Impossible de joindre Stockpot.",
+      "ssl_error": "Le certificat TLS de Stockpot est refusé. Vérifiez l'URL, ou désactivez la vérification SSL pour un certificat auto-signé.",
+      "invalid_auth": "Jeton invalide, révoqué ou expiré.",
+      "missing_ability": "Ce jeton n'a pas la capacité « ha ». Créez-en un dans Stockpot > Réglages > Home Assistant.",
+      "two_factor_required": "Ce foyer exige la double authentification : activez-la sur le compte du jeton.",
+      "household_forbidden": "Ce jeton est lié à un autre foyer, ou le compte n'en est pas membre.",
+      "no_household": "Ce compte n'a aucun foyer.",
+      "unknown": "Erreur inattendue."
+    },
+    "abort": {
+      "already_configured": "Ce foyer est déjà configuré.",
+      "reauth_successful": "Jeton mis à jour.",
+      "reconfigure_successful": "Configuration mise à jour.",
+      "wrong_instance": "Ce jeton appartient à une autre instance de Stockpot ou à un autre foyer : ajoutez-le comme nouvelle intégration."
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "drive_order_due": {
+        "name": "Commande Drive à passer"
+      }
+    },
+    "calendar": {
+      "meals": {
+        "name": "Repas"
+      },
+      "meals_breakfast": {
+        "name": "Petit-déjeuner"
+      },
+      "meals_lunch": {
+        "name": "Déjeuner"
+      },
+      "meals_snack": {
+        "name": "Goûter"
+      },
+      "meals_dinner": {
+        "name": "Dîner"
+      }
+    },
+    "sensor": {
+      "to_buy": {
+        "name": "Articles à acheter",
+        "unit_of_measurement": "articles"
+      },
+      "low_stock": {
+        "name": "Stock bas",
+        "unit_of_measurement": "articles"
+      },
+      "expiring": {
+        "name": "Péremptions proches",
+        "unit_of_measurement": "articles"
+      },
+      "next_meal": {
+        "name": "Prochain repas"
+      }
+    },
+    "todo": {
+      "main_shopping_list": {
+        "name": "Liste de courses"
+      }
+    }
+  },
+  "exceptions": {
+    "invalid_auth": {
+      "message": "Jeton invalide, révoqué ou expiré."
+    },
+    "missing_ability": {
+      "message": "Ce jeton n'a pas la capacité « ha ». Créez-en un dans Stockpot > Réglages > Home Assistant."
+    },
+    "cannot_connect": {
+      "message": "Impossible de joindre Stockpot : {error}"
+    },
+    "api_error": {
+      "message": "Stockpot a refusé l'action : {error}"
+    },
+    "item_not_found": {
+      "message": "La ligne {uid} n'est plus sur la liste."
+    },
+    "already_received": {
+      "message": "Cette ligne est déjà rangée au stock : elle ne peut pas être décochée."
+    },
+    "product_rename": {
+      "message": "Un article du catalogue se renomme dans Stockpot, pas depuis la liste."
+    },
+    "no_entry": {
+      "message": "Aucun foyer Stockpot chargé."
+    },
+    "several_entries": {
+      "message": "Plusieurs foyers Stockpot : choisissez-en un (config_entry_id)."
+    },
+    "quantity_required": {
+      "message": "Indiquez une quantité avec un identifiant d'article."
+    },
+    "product_required": {
+      "message": "Indiquez un code-barres ou un identifiant d'article."
+    },
+    "item_required": {
+      "message": "Indiquez un texte libre, un code-barres ou un identifiant d'article."
+    },
+    "meal_type_inactive": {
+      "message": "Ce repas n'est pas planifié dans le foyer."
+    },
+    "meal_required": {
+      "message": "Indiquez une recette ou une note."
+    },
+    "meal_reference_required": {
+      "message": "Indiquez l'identifiant du repas, ou sa date et le repas."
+    },
+    "meal_not_found": {
+      "message": "Aucun repas à cuisiner à cette date."
+    },
+    "household_forbidden": {
+      "message": "Ce jeton n'est pas autorisé sur ce foyer (jeton lié à un autre foyer, ou compte qui n'en est plus membre)."
+    },
+    "two_factor_required": {
+      "message": "Ce foyer exige la double authentification : activez-la sur le compte du jeton."
+    }
+  },
+  "selector": {
+    "meal_type": {
+      "options": {
+        "breakfast": "Petit-déjeuner",
+        "lunch": "Déjeuner",
+        "snack": "Goûter",
+        "dinner": "Dîner"
+      }
+    },
+    "todo_description": {
+      "options": {
+        "for": "Pour :",
+        "low_stock": "Stock bas"
+      }
+    },
+    "calendar_description": {
+      "options": {
+        "servings": "{servings} pers.",
+        "decimal_separator": ","
+      }
+    }
+  },
+  "services": {
+    "consume_product": {
+      "name": "Consommer un article",
+      "description": "Retire un article du stock (par code-barres ou article), premier périmé d'abord.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Foyer",
+          "description": "Foyer Stockpot (utile seulement avec plusieurs foyers)"
+        },
+        "ean": {
+          "name": "Code-barres",
+          "description": "EAN d'un article du foyer ; la quantité est alors un nombre de conditionnements."
+        },
+        "product_id": {
+          "name": "Identifiant de l'article",
+          "description": "Article Stockpot (à la place d'un code-barres)."
+        },
+        "quantity": {
+          "name": "Quantité",
+          "description": "Conditionnements avec un code-barres (1 par défaut), sinon dans l'unité de base de l'article ou dans l'unité indiquée."
+        },
+        "unit_id": {
+          "name": "Identifiant de l'unité",
+          "description": "Unité de la quantité (convertie par Stockpot)."
+        },
+        "location_id": {
+          "name": "Identifiant de l'emplacement",
+          "description": "Frigo, congélateur… (par défaut : celui de l'article)."
+        }
+      }
+    },
+    "add_stock": {
+      "name": "Ajouter au stock",
+      "description": "Ajoute un nouveau lot d'un article au stock.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Foyer",
+          "description": "Foyer Stockpot (utile seulement avec plusieurs foyers)"
+        },
+        "ean": {
+          "name": "Code-barres",
+          "description": "EAN d'un article du foyer ; la quantité est alors un nombre de conditionnements."
+        },
+        "product_id": {
+          "name": "Identifiant de l'article",
+          "description": "Article Stockpot (à la place d'un code-barres)."
+        },
+        "quantity": {
+          "name": "Quantité",
+          "description": "Conditionnements avec un code-barres (1 par défaut), sinon dans l'unité de base de l'article ou dans l'unité indiquée."
+        },
+        "unit_id": {
+          "name": "Identifiant de l'unité",
+          "description": "Unité de la quantité (convertie par Stockpot)."
+        },
+        "location_id": {
+          "name": "Identifiant de l'emplacement",
+          "description": "Frigo, congélateur… (par défaut : celui de l'article)."
+        },
+        "best_before": {
+          "name": "À consommer avant",
+          "description": "Date de péremption du nouveau lot."
+        }
+      }
+    },
+    "add_to_shopping_list": {
+      "name": "Ajouter aux courses",
+      "description": "Ajoute un article ou une ligne libre à une liste de courses.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Foyer",
+          "description": "Foyer Stockpot (utile seulement avec plusieurs foyers)"
+        },
+        "label": {
+          "name": "Texte libre",
+          "description": "Ligne sans article du catalogue."
+        },
+        "ean": {
+          "name": "Code-barres",
+          "description": "EAN d'un article du foyer ; la quantité est alors un nombre de conditionnements."
+        },
+        "product_id": {
+          "name": "Identifiant de l'article",
+          "description": "Article Stockpot (à la place d'un code-barres)."
+        },
+        "quantity": {
+          "name": "Quantité",
+          "description": "Conditionnements avec un code-barres (1 par défaut), sinon dans l'unité de base de l'article ou dans l'unité indiquée."
+        },
+        "unit_id": {
+          "name": "Identifiant de l'unité",
+          "description": "Unité de la quantité (convertie par Stockpot)."
+        },
+        "note": {
+          "name": "Note",
+          "description": "Note de la ligne ou du repas."
+        },
+        "list_id": {
+          "name": "Identifiant de la liste",
+          "description": "Par défaut : la liste principale."
+        }
+      }
+    },
+    "plan_meal": {
+      "name": "Planifier un repas",
+      "description": "Planifie une recette ou une note pour un repas.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Foyer",
+          "description": "Foyer Stockpot (utile seulement avec plusieurs foyers)"
+        },
+        "date": {
+          "name": "Date",
+          "description": "Jour du repas."
+        },
+        "meal_type": {
+          "name": "Repas",
+          "description": "Petit-déjeuner, déjeuner, goûter ou dîner."
+        },
+        "recipe_id": {
+          "name": "Identifiant de la recette",
+          "description": "Recette à planifier (ou une note)."
+        },
+        "note": {
+          "name": "Note",
+          "description": "Note de la ligne ou du repas."
+        },
+        "servings": {
+          "name": "Portions",
+          "description": "Par défaut : calculées d'après les personnes présentes."
+        }
+      }
+    },
+    "cook_meal": {
+      "name": "Marquer un repas comme cuisiné",
+      "description": "Marque un repas planifié comme cuisiné ; Stockpot déstocke ses ingrédients.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Foyer",
+          "description": "Foyer Stockpot (utile seulement avec plusieurs foyers)"
+        },
+        "entry_id": {
+          "name": "Identifiant du repas",
+          "description": "Repas planifié (ou date + repas)."
+        },
+        "date": {
+          "name": "Date",
+          "description": "Jour du repas."
+        },
+        "meal_type": {
+          "name": "Repas",
+          "description": "Petit-déjeuner, déjeuner, goûter ou dîner."
+        }
+      }
+    },
+    "generate_shopping_list": {
+      "name": "Mettre à jour la liste de courses",
+      "description": "Recalcule la liste de courses principale d'après le planning et le stock.",
+      "fields": {
+        "config_entry_id": {
+          "name": "Foyer",
+          "description": "Foyer Stockpot (utile seulement avec plusieurs foyers)"
+        },
+        "until": {
+          "name": "Jusqu'au",
+          "description": "Fin de la période couverte (par défaut : jusqu'à la prochaine commande Drive)."
+        }
+      }
+    }
+  }
+}

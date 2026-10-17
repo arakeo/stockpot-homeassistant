@@ -1,0 +1,32 @@
+# Carte Lovelace : repas du jour (prochain repas + agenda du jour) et accès au planning.
+# À coller dans un tableau de bord : Modifier > Ajouter une carte > Manuel.
+type: vertical-stack
+cards:
+  - type: markdown
+    title: Au menu
+    content: >-
+      {% set repas = states('sensor.foyer_martin_prochain_repas') %}
+      {% if repas not in ['unknown', 'unavailable', ''] %}
+      **{{ repas }}** —
+      {{ as_timestamp(state_attr('sensor.foyer_martin_prochain_repas', 'starts_at')) | timestamp_custom('%H:%M') }}
+      · {{ state_attr('sensor.foyer_martin_prochain_repas', 'servings') }} pers.
+      ({{ state_attr('sensor.foyer_martin_prochain_repas', 'present') | join(', ') }})
+      {% else %}
+      Rien de prévu.
+      {% endif %}
+  - type: calendar
+    initial_view: listWeek
+    entities:
+      - calendar.foyer_martin_repas
+  - type: entities
+    entities:
+      - entity: sensor.foyer_martin_articles_a_acheter
+      - entity: binary_sensor.foyer_martin_commande_drive_a_passer
+      - entity: sensor.foyer_martin_stock_bas
+  # Vue Stockpot embarquée : `allow: camera` pour le scan des codes-barres. Fonctionne
+  # seulement dans un navigateur déjà connecté à Stockpot sur le même site (pas dans
+  # l'application compagnon, ni via homeassistant.local / une IP / Nabu Casa).
+  - type: iframe
+    url: https://stockpot.arakeo.com/ha/planning
+    aspect_ratio: 75%
+    allow: "camera; fullscreen"

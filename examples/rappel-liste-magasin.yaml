@@ -1,0 +1,31 @@
+# Automatisation : rappel de la liste de courses en arrivant près du magasin.
+# Prérequis : une zone « zone.carrefour » (Paramètres > Zones) et l'application
+# mobile Home Assistant (person.camille suivie par le GPS du téléphone).
+alias: "Stockpot — rappel de liste près du magasin"
+mode: single
+triggers:
+  - trigger: zone
+    entity_id: person.camille
+    zone: zone.carrefour
+    event: enter
+conditions:
+  - condition: numeric_state
+    entity_id: sensor.foyer_martin_articles_a_acheter
+    above: 0
+actions:
+  - action: todo.get_items
+    target:
+      entity_id: todo.foyer_martin_liste_de_courses
+    data:
+      status: needs_action
+    response_variable: courses
+  - action: notify.mobile_app_telephone_de_camille
+    data:
+      title: "🛒 {{ states('sensor.foyer_martin_articles_a_acheter') }} articles à acheter"
+      message: >-
+        {{ courses['todo.foyer_martin_liste_de_courses']['items']
+           | map(attribute='summary') | join(', ') }}
+      data:
+        # Ouvre la liste dans Home Assistant (l'application compagnon ne peut pas se
+        # connecter à Stockpot dans un cadre : on reste sur les entités).
+        url: "/todo?entity_id=todo.foyer_martin_liste_de_courses"
