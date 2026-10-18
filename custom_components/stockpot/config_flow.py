@@ -1,10 +1,14 @@
 """Config flow of the Stockpot integration.
 
-First step: Stockpot URL, SSL check and the sign-in method:
-- « Se connecter avec Stockpot » (recommended): OAuth2 Authorization Code + PKCE through
-  Home Assistant's `config_entry_oauth2_flow`, endpoints discovered on the instance (RFC 8414);
-  the household is chosen on the Stockpot consent screen and returned with the tokens;
-- « Jeton manuel »: an `ha` token pasted by the user, then the household (unchanged since 0.9).
+Since 0.11.0, « Ajouter l'intégration → Stockpot » goes straight to the OAuth2 sign-in
+(Authorization Code + PKCE through Home Assistant's `config_entry_oauth2_flow`) against
+`STOCKPOT_URL`, with the SSL check always on: nothing to type. The household is chosen on the
+Stockpot consent screen and returned with the tokens.
+
+Entries created before 0.11.0 keep their own URL and SSL setting. A manual-token entry (0.9 /
+0.10) is offered, on reauthentication and reconfigure, a menu: the sign-in against its own URL
+(the entry becomes an OAuth entry on success) or a new token (reconfigure: also URL and SSL
+check, as in 0.10).
 """
 
 from __future__ import annotations
@@ -20,15 +24,7 @@ from homeassistant.const import CONF_TOKEN, CONF_URL, CONF_VERIFY_SSL
 from homeassistant.data_entry_flow import AbortFlow
 from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
-from homeassistant.helpers.selector import (
-    SelectOptionDict,
-    SelectSelector,
-    SelectSelectorConfig,
-    SelectSelectorMode,
-    TextSelector,
-    TextSelectorConfig,
-    TextSelectorType,
-)
+from homeassistant.helpers.selector import TextSelector, TextSelectorConfig, TextSelectorType
 
 from .api import (
     StockpotApiError,
@@ -38,7 +34,7 @@ from .api import (
     StockpotError,
     StockpotSslError,
 )
-from .const import AUTH_METHOD_OAUTH, AUTH_METHOD_TOKEN, CONF_AUTH_METHOD, CONF_HOUSEHOLD_ID, DOMAIN
+from .const import AUTH_METHOD_OAUTH, CONF_AUTH_METHOD, CONF_HOUSEHOLD_ID, DOMAIN, STOCKPOT_URL
 from .oauth import (
     CONF_AUTH_IMPLEMENTATION,
     CONF_OAUTH_TOKEN,
@@ -55,58 +51,19 @@ from .oauth import (
 _LOGGER = logging.getLogger(__name__)
 
 TOKEN_SELECTOR = TextSelector(TextSelectorConfig(type=TextSelectorType.PASSWORD))
-
-
 URL_SELECTOR = TextSelector(TextSelectorConfig(type=TextSelectorType.URL))
-AUTH_METHOD_SELECTOR = SelectSelector(
-    SelectSelectorConfig(
-        options=[AUTH_METHOD_OAUTH, AUTH_METHOD_TOKEN],
-        mode=SelectSelectorMode.LIST,
-        translation_key=CONF_AUTH_METHOD,
-    )
-)
 
+# Errors after which a manual-token entry falls back to the token form on reauthentication:
+# its Stockpot does not offer the Home Assistant sign-in.
+NO_SIGN_IN_ERRORS = ("oauth_unsupported", "not_stockpot")
 
-def _start_schema(defaults: Mapping[str, Any]) -> vol.Schema:
-    return vol.Schema(
-        {
-            vol.Required(CONF_URL, default=defaults.get(CONF_URL, "")): URL_SELECTOR,
-            vol.Required(CONF_VERIFY_SSL, default=defaults.get(CONF_VERIFY_SSL, True)): bool,
-            vol.Required(CONF_AUTH_METHOD, default=defaults.get(CONF_AUTH_METHOD, AUTH_METHOD_OAUTH)): (
-                AUTH_METHOD_SELECTOR
-            ),
-        }
-    )
-
-
-def _oauth_server_schema(defaults: Mapping[str, Any]) -> vol.Schema:
-    return vol.Schema(
-        {
-            vol.Required(CONF_URL, default=defaults.get(CONF_URL, "")): URL_SELECTOR,
-            vol.Required(CONF_VERIFY_SSL, default=defaults.get(CONF_VERIFY_SSL, True)): bool,
-        }
-    )
-
-
-def _user_schema(defaults: Mapping[str, Any]) -> vol.Schema:
-    return vol.Schema(
-        {
-            vol.Required(CONF_URL, default=defaults.get(CONF_URL, "")): TextSelector(
-                TextSelectorConfig(type=TextSelectorType.URL)
-            ),
-            vol.Required(CONF_TOKEN): TOKEN_SELECTOR,
-            vol.Required(CONF_VERIFY_SSL, default=defaults.get(CONF_VERIFY_SSL, True)): bool,
-        }
-    )
+# A manual entry's API token (CONF_TOKEN) and an OAuth entry's token dict (CONF_OAUTH_TOKEN)
+# share the entry key `token`: converting a manual entry to OAuth replaces the former.
 
 
 def _unique_id(instance_id: str, household_id: int) -> str:
     """Stable across URL changes: Stockpot instance id + household."""
     return f"{instance_id}#{household_id}"
-
-
-def _normalize_url(url: str) -> str:
-    return url.strip().rstrip("/")
 
 
 class StockpotConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, domain=DOMAIN):
@@ -119,7 +76,7 @@ class StockpotConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, dom
         """Start a flow."""
         super().__init__()
         self._data: dict[str, Any] = {}
-        self._households: list[dict[str, Any]] = []
+        self._verify_ssl = True
         self._instance_id: str = ""
         self._my_warned = False
 
@@ -128,93 +85,27 @@ class StockpotConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, dom
         """Logger of the OAuth2 helper."""
         return _LOGGER
 
-    async def _validate(
-        self, data: Mapping[str, Any], household_id: int | None = None
-    ) -> tuple[dict[str, str], list[dict[str, Any]]]:
-        """Check URL, token and SSL (and read the instance id); with a household, check the
-        `ha` ability on it. An `ha` token is bound to one household by Stockpot."""
-        session = async_get_clientsession(self.hass, verify_ssl=data[CONF_VERIFY_SSL])
-        client = StockpotClient(session, data[CONF_URL], data[CONF_TOKEN], household_id)
-        households: list[dict[str, Any]] = []
-        try:
-            self._instance_id = await client.instance_id()
-            if household_id is None:
-                households = await client.households()
-                if not households:
-                    return {"base": "no_household"}, []
-            else:
-                await client.summary()
-        except StockpotSslError:
-            return {"base": "ssl_error"}, []
-        except StockpotConnectionError:
-            return {"base": "cannot_connect"}, []
-        except StockpotAuthError:
-            return {"base": "invalid_auth"}, []
-        except StockpotApiError as err:
-            if err.code == "missing_ability":
-                return {"base": "missing_ability"}, []
-            if err.code in ("two_factor_required", "household_forbidden"):
-                return {"base": err.code}, []
-            _LOGGER.exception("Unexpected Stockpot answer")
-            return {"base": "unknown"}, []
-        except StockpotError:
-            _LOGGER.exception("Unexpected Stockpot error")
-            return {"base": "unknown"}, []
-        return {}, households
-
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """URL, SSL check and sign-in method."""
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            url = _normalize_url(user_input[CONF_URL])
-            verify_ssl = user_input[CONF_VERIFY_SSL]
-            if user_input[CONF_AUTH_METHOD] == AUTH_METHOD_TOKEN:
-                self._data = {CONF_URL: url, CONF_VERIFY_SSL: verify_ssl}
-                return await self.async_step_token()
-            errors = await self._async_start_oauth(url, verify_ssl)
-            if not errors:
-                return await self.async_step_auth()
+        """Straight to the sign-in on Stockpot. A form (no field) is shown only when the sign-in
+        cannot start: it tells why, and submitting it tries again."""
+        errors = await self._async_start_oauth(STOCKPOT_URL, True)
+        if not errors:
+            return await self.async_step_auth()
         return self.async_show_form(
             step_id="user",
-            data_schema=_start_schema(user_input or {}),
-            errors=errors,
-        )
-
-    async def async_step_token(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Manual `ha` token (URL and SSL check already given)."""
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            data = {**self._data, CONF_TOKEN: user_input[CONF_TOKEN]}
-            errors, households = await self._validate(data)
-            if errors.get("base") in ("ssl_error", "cannot_connect"):
-                # URL or SSL check to fix: back to the first step, with what was typed.
-                return self.async_show_form(
-                    step_id="user",
-                    data_schema=_start_schema({**self._data, CONF_AUTH_METHOD: AUTH_METHOD_TOKEN}),
-                    errors=errors,
-                )
-            if not errors:
-                self._data = data
-                self._households = households
-                if len(households) == 1:
-                    return await self.async_step_household({CONF_HOUSEHOLD_ID: str(households[0]["id"])})
-                return await self.async_step_household()
-        return self.async_show_form(
-            step_id="token",
-            data_schema=vol.Schema({vol.Required(CONF_TOKEN): TOKEN_SELECTOR}),
-            description_placeholders={"url": self._data[CONF_URL]},
+            description_placeholders={"url": STOCKPOT_URL},
             errors=errors,
         )
 
     # --- OAuth -------------------------------------------------------------------
 
-    async def _async_start_oauth(self, url: str, verify_ssl: bool) -> dict[str, str]:
-        """Discover the endpoints and prepare the PKCE implementation of this instance."""
-        if "my" not in self.hass.config.components and not self._my_warned:
-            # Without My Home Assistant, Stockpot must allow https://<ha>/auth/external/callback
-            # (STOCKPOT_OAUTH_HA_REDIRECT_HOSTS): warn once, a second submit goes on.
-            self._my_warned = True
-            return {"base": "my_required"}
+    async def _async_start_oauth(self, url: str, verify_ssl: bool, *, discover_first: bool = False) -> dict[str, str]:
+        """Discover the endpoints and prepare the PKCE implementation of this instance.
+
+        `discover_first` (manual-token entries): the My Home Assistant warning only once the
+        instance proved it offers the sign-in, so a pre-M17 Stockpot is not shown it."""
+        if not discover_first and (warning := self._my_warning()):
+            return warning
         try:
             endpoints = await async_discover(self.hass, url, verify_ssl)
         except StockpotSslError:
@@ -228,16 +119,31 @@ class StockpotConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, dom
         except StockpotInsecureEndpointError:
             return {"base": "insecure_endpoint"}
         except StockpotPublicHttpError:
+            # Only reachable from a pre-0.11 entry with a plain-http LAN URL (reauth, reconfigure).
             return {"base": "http_public_host"}
-        self._data = {CONF_URL: url, CONF_VERIFY_SSL: verify_ssl, **endpoints.as_data()}
+        if discover_first and (warning := self._my_warning()):
+            return warning
+        self._verify_ssl = verify_ssl
+        self._data = {CONF_URL: url, **endpoints.as_data()}
+        if not verify_ssl:
+            # Kept only for a pre-0.11 entry that disabled the check; new entries omit the key.
+            self._data[CONF_VERIFY_SSL] = False
         # A fresh implementation per flow: its own PKCE verifier.
         self.flow_impl = StockpotOAuth2Implementation(self.hass, url, verify_ssl, endpoints)
         return {}
 
+    def _my_warning(self) -> dict[str, str]:
+        """Without My Home Assistant, Stockpot must allow https://<ha>/auth/external/callback
+        (STOCKPOT_OAUTH_HA_REDIRECT_HOSTS): warn once, a second submit goes on."""
+        if "my" in self.hass.config.components or self._my_warned:
+            return {}
+        self._my_warned = True
+        return {"base": "my_required"}
+
     async def async_oauth_create_entry(self, data: dict) -> ConfigFlowResult:
         """Tokens received: unique id from the `instance_id` / `household_id` extensions."""
         token: dict[str, Any] = data[CONF_OAUTH_TOKEN]
-        session = async_get_clientsession(self.hass, verify_ssl=self._data[CONF_VERIFY_SSL])
+        session = async_get_clientsession(self.hass, verify_ssl=self._verify_ssl)
         client = StockpotClient(session, self._data[CONF_URL], str(token["access_token"]))
         reason: str | None = None
         try:
@@ -273,8 +179,8 @@ class StockpotConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, dom
         unique_id = _unique_id(str(instance_id), int(household_id))
         update = self.source in (SOURCE_REAUTH, SOURCE_RECONFIGURE)
         try:
-            # Any abort here (configured, ignored, in progress, other instance or household)
-            # leaves the access just created unused: revoke it.
+            # Any abort here (already configured, flow in progress, other instance or
+            # household) leaves the access just created unused: revoke it.
             await self.async_set_unique_id(unique_id, raise_on_progress=not update)
             if update:
                 self._abort_if_unique_id_mismatch(reason="wrong_instance")
@@ -286,6 +192,8 @@ class StockpotConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, dom
         if update:
             entry = self._get_reauth_entry() if self.source == SOURCE_REAUTH else self._get_reconfigure_entry()
             previous = dict(entry.data)
+            # Webhook: Stockpot keeps a single one per household (last registration wins); the
+            # reload registers it again with this access and a new secret.
             result = self.async_update_reload_and_abort(entry, data_updates=entry_data)
             await self._async_revoke_previous(entry, previous, token)
             return result
@@ -314,59 +222,38 @@ class StockpotConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, dom
             return
         await async_revoke(self.hass, previous, old_refresh)
 
-    async def async_step_household(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Choose the household (asked only when the user has several)."""
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            household_id = int(user_input[CONF_HOUSEHOLD_ID])
-            household = next((h for h in self._households if h["id"] == household_id), None)
-            if household is None:
-                errors["base"] = "household_forbidden"
-            else:
-                await self.async_set_unique_id(_unique_id(self._instance_id, household_id))
-                self._abort_if_unique_id_configured()
-                errors, _ = await self._validate(self._data, household_id)
-                if not errors:
-                    return self.async_create_entry(
-                        title=household["name"],
-                        data={**self._data, CONF_HOUSEHOLD_ID: household_id},
-                    )
-        options = [SelectOptionDict(value=str(h["id"]), label=h["name"]) for h in self._households]
-        return self.async_show_form(
-            step_id="household",
-            data_schema=vol.Schema(
-                {vol.Required(CONF_HOUSEHOLD_ID): SelectSelector(SelectSelectorConfig(options=options))}
-            ),
-            errors=errors,
-        )
+    # --- reauthentication ----------------------------------------------------------
 
     async def async_step_reauth(self, entry_data: Mapping[str, Any]) -> ConfigFlowResult:
-        """The token was revoked, expired or lost the `ha` ability (OAuth: refresh refused)."""
+        """Access lost. OAuth entry: sign in again. Manual-token entry (pre-0.11): choose between
+        the sign-in (converts the entry) and a new token (if this Home Assistant cannot finish
+        the sign-in: no My Home Assistant, host not allowed by Stockpot)."""
         if is_oauth_entry(entry_data):
             return await self.async_step_reauth_oauth()
-        return await self.async_step_reauth_confirm()
+        return await self.async_step_reauth_manual()
 
-    async def async_step_reauth_oauth(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Sign in with Stockpot again (same instance and household)."""
-        entry = self._get_reauth_entry()
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            errors = await self._async_start_oauth(entry.data[CONF_URL], entry.data.get(CONF_VERIFY_SSL, True))
-            if not errors:
-                return await self.async_step_auth()
-        return self.async_show_form(
-            step_id="reauth_oauth",
-            description_placeholders={"url": entry.data[CONF_URL]},
-            errors=errors,
+    async def async_step_reauth_manual(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Manual-token entry: sign in with Stockpot or paste a new token."""
+        return self.async_show_menu(
+            step_id="reauth_manual",
+            menu_options=["reauth_oauth", "reauth_confirm"],
+            description_placeholders={"url": self._get_reauth_entry().data[CONF_URL]},
         )
 
+    async def async_step_reauth_oauth(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Sign in with Stockpot again, at the entry's own URL (same instance and household).
+
+        A manual-token entry becomes an OAuth entry on success (its token is not revoked); if
+        its Stockpot has no Home Assistant sign-in, the token form is shown instead."""
+        return await self._async_sign_in_again(self._get_reauth_entry(), "reauth_oauth", user_input)
+
     async def async_step_reauth_confirm(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Ask for a new token."""
+        """Manual-token entry: a new token."""
         entry = self._get_reauth_entry()
         errors: dict[str, str] = {}
         if user_input is not None:
             data = {**entry.data, CONF_TOKEN: user_input[CONF_TOKEN]}
-            errors, _ = await self._validate(data, entry.data[CONF_HOUSEHOLD_ID])
+            errors = await self._validate(data, entry.data[CONF_HOUSEHOLD_ID])
             if not errors:
                 await self.async_set_unique_id(_unique_id(self._instance_id, entry.data[CONF_HOUSEHOLD_ID]))
                 self._abort_if_unique_id_mismatch(reason="wrong_instance")
@@ -378,20 +265,82 @@ class StockpotConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, dom
             errors=errors,
         )
 
+    async def _async_sign_in_again(
+        self, entry: ConfigEntry, step_id: str, user_input: dict[str, Any] | None
+    ) -> ConfigFlowResult:
+        """OAuth at the entry's URL with its SSL setting. An OAuth entry confirms first; a manual
+        entry got here from the menu and starts at once. Errors: a form that retries."""
+        manual = not is_oauth_entry(entry.data)
+        errors: dict[str, str] = {}
+        if user_input is not None or manual:
+            errors = await self._async_start_oauth(
+                entry.data[CONF_URL], entry.data.get(CONF_VERIFY_SSL, True), discover_first=manual
+            )
+            if not errors:
+                return await self.async_step_auth()
+            if manual and self.source == SOURCE_REAUTH and errors["base"] in NO_SIGN_IN_ERRORS:
+                return await self.async_step_reauth_confirm()
+        return self.async_show_form(
+            step_id=step_id,
+            description_placeholders={"url": entry.data[CONF_URL]},
+            errors=errors,
+        )
+
+    async def _validate(self, data: Mapping[str, Any], household_id: int) -> dict[str, str]:
+        """Manual token: check it (and read the instance id) and its `ha` ability on the household."""
+        session = async_get_clientsession(self.hass, verify_ssl=data.get(CONF_VERIFY_SSL, True))
+        client = StockpotClient(session, data[CONF_URL], data[CONF_TOKEN], household_id)
+        try:
+            self._instance_id = await client.instance_id()
+            await client.summary()
+        except StockpotSslError:
+            return {"base": "ssl_error"}
+        except StockpotConnectionError:
+            return {"base": "cannot_connect"}
+        except StockpotAuthError:
+            return {"base": "invalid_auth"}
+        except StockpotApiError as err:
+            if err.code == "missing_ability":
+                return {"base": "missing_ability"}
+            if err.code in ("two_factor_required", "household_forbidden"):
+                return {"base": err.code}
+            _LOGGER.exception("Unexpected Stockpot answer")
+            return {"base": "unknown"}
+        except StockpotError:
+            _LOGGER.exception("Unexpected Stockpot error")
+            return {"base": "unknown"}
+        return {}
+
+    # --- reconfigure -----------------------------------------------------------------
+
     async def async_step_reconfigure(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """Change URL, token or SSL check of the same household."""
+        """OAuth entry: sign in again at its URL (not editable). Manual-token entry (pre-0.11):
+        the sign-in (converts the entry) or, as in 0.10, URL / token / SSL check."""
         entry = self._get_reconfigure_entry()
         if is_oauth_entry(entry.data):
             return await self.async_step_reconfigure_oauth()
+        return await self.async_step_reconfigure_manual()
+
+    async def async_step_reconfigure_manual(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Manual-token entry: sign in with Stockpot, or change URL / token / SSL check."""
+        return self.async_show_menu(
+            step_id="reconfigure_manual",
+            menu_options=["reconfigure_oauth", "reconfigure_token"],
+            description_placeholders={"url": self._get_reconfigure_entry().data[CONF_URL]},
+        )
+
+    async def async_step_reconfigure_oauth(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Sign in with Stockpot again at the entry's URL (same instance and household)."""
+        return await self._async_sign_in_again(self._get_reconfigure_entry(), "reconfigure_oauth", user_input)
+
+    async def async_step_reconfigure_token(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """Manual-token entry: change URL, token or SSL check of the same household (as in 0.10)."""
+        entry = self._get_reconfigure_entry()
         errors: dict[str, str] = {}
         if user_input is not None:
-            data = {
-                **entry.data,
-                **user_input,
-                CONF_URL: _normalize_url(user_input[CONF_URL]),
-            }
+            data = {**entry.data, **user_input, CONF_URL: user_input[CONF_URL].strip().rstrip("/")}
             household_id = entry.data[CONF_HOUSEHOLD_ID]
-            errors, _ = await self._validate(data, household_id)
+            errors = await self._validate(data, household_id)
             if not errors:
                 # Same instance (stable id), possibly behind a new URL.
                 await self.async_set_unique_id(_unique_id(self._instance_id, household_id))
@@ -405,24 +354,16 @@ class StockpotConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, dom
                     },
                 )
         return self.async_show_form(
-            step_id="reconfigure",
+            step_id="reconfigure_token",
             data_schema=self.add_suggested_values_to_schema(
-                _user_schema(entry.data),
-                {CONF_URL: entry.data[CONF_URL], CONF_VERIFY_SSL: entry.data[CONF_VERIFY_SSL]},
+                vol.Schema(
+                    {
+                        vol.Required(CONF_URL): URL_SELECTOR,
+                        vol.Required(CONF_TOKEN): TOKEN_SELECTOR,
+                        vol.Required(CONF_VERIFY_SSL, default=True): bool,
+                    }
+                ),
+                {CONF_URL: entry.data[CONF_URL], CONF_VERIFY_SSL: entry.data.get(CONF_VERIFY_SSL, True)},
             ),
-            errors=errors,
-        )
-
-    async def async_step_reconfigure_oauth(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
-        """OAuth entry: change URL or SSL check, then sign in again (same instance)."""
-        entry = self._get_reconfigure_entry()
-        errors: dict[str, str] = {}
-        if user_input is not None:
-            errors = await self._async_start_oauth(_normalize_url(user_input[CONF_URL]), user_input[CONF_VERIFY_SSL])
-            if not errors:
-                return await self.async_step_auth()
-        return self.async_show_form(
-            step_id="reconfigure_oauth",
-            data_schema=_oauth_server_schema(user_input or entry.data),
             errors=errors,
         )

@@ -3,28 +3,34 @@
 Intégration personnalisée (HACS) de [Stockpot](https://stockpot.arakeo.com) : listes de courses, planning des repas, alertes de stock et actions.
 
 - **Home Assistant** : 2026.10 ou plus récent (voir `hacs.json`).
-- **Stockpot** : M8 ou plus récent (API `/api/v1`, endpoints `/ha/*`) pour le jeton manuel. « Se connecter avec Stockpot » (OAuth2) exige **Stockpot M17** tel que fusionné (PR #27 : un accès distinct par connexion). La version 0.10.0 n'est publiée qu'après le déploiement de M17.
+- **Stockpot** : l'intégration se connecte à **`https://stockpot.arakeo.com`** (constante `STOCKPOT_URL` de `const.py`), certificat TLS toujours vérifié. Les nouvelles entrées exigent Stockpot M17 ou plus récent (connexion OAuth2 de Home Assistant).
 
 ## Installation
 
 1. HACS > Intégrations > ⋮ > Dépôts personnalisés : ajoutez ce dépôt (catégorie « Intégration »), puis installez **Stockpot**. Sans HACS : copiez `custom_components/stockpot` dans le dossier `config/custom_components/` de Home Assistant.
 2. Redémarrez Home Assistant.
-3. Dans Home Assistant : **Paramètres > Appareils et services > Ajouter une intégration > Stockpot** : URL de Stockpot (ex. `https://stockpot.arakeo.com`), vérification SSL, puis la méthode de connexion.
+3. **Paramètres > Appareils et services > Ajouter l'intégration > Stockpot → Se connecter → Autoriser.** Rien à saisir : ni adresse, ni option SSL, ni méthode de connexion.
 
-### Se connecter avec Stockpot (recommandé)
-
-Home Assistant lit le document de découverte de l'instance (`/.well-known/oauth-authorization-server`) et ouvre Stockpot dans un nouvel onglet : connexion habituelle (Google + double authentification), choix du foyer, **Autoriser**. L'onglet se ferme et l'intégration est créée pour ce foyer. Aucun jeton à copier : l'accès est renouvelé automatiquement (jeton d'accès d'une heure, refresh token tournant).
+Home Assistant lit le document de découverte de Stockpot (`/.well-known/oauth-authorization-server`) et ouvre Stockpot dans un nouvel onglet : connexion habituelle (Google + double authentification), choix du foyer, **Autoriser**. L'onglet se ferme et l'intégration est créée pour ce foyer. Aucun jeton à copier : l'accès est renouvelé automatiquement (jeton d'accès d'une heure, refresh token tournant). Pour un second foyer, ajoutez l'intégration une seconde fois.
 
 - **Prérequis : l'intégration [My Home Assistant](https://www.home-assistant.io/integrations/my/)** (`my`, incluse dans `default_config`). Stockpot renvoie le navigateur vers `https://my.home-assistant.io/redirect/oauth`, qui le ramène à votre Home Assistant. Sans `my`, l'assistant affiche un avertissement : Home Assistant utiliserait `https://<votre-ha>/auth/external/callback`, que Stockpot n'accepte que si l'hôte figure dans `STOCKPOT_OAUTH_HA_REDIRECT_HOSTS` ; validez à nouveau pour continuer dans ce cas.
-- **Transport** : une instance en `https` qui annonce un point de connexion en `http` est refusée ; le `http` simple n'est accepté que pour une adresse locale (loopback, réseau privé, nom sans point, `.local`, `.lan`, `.home.arpa`, `.internal`). Une adresse locale saisie alors que Stockpot annonce son adresse publique (`APP_URL`) est acceptée, avec un avertissement dans le journal.
-- Si l'accès est révoqué (Stockpot > Réglages > Home Assistant > Déconnecter), expiré (90 jours sans usage) ou si le compte quitte le foyer, Home Assistant demande de **se reconnecter** (réauthentification) ; l'ancien accès est alors révoqué.
+- Si la connexion ne peut pas démarrer (Stockpot injoignable, certificat refusé…), l'assistant affiche l'erreur ; validez pour réessayer.
+- Si l'accès est révoqué (Stockpot > Réglages > Home Assistant > Déconnecter), expiré (90 jours sans usage) ou si le compte quitte le foyer, Home Assistant demande de **se reconnecter** (réauthentification) ; l'ancien accès est alors révoqué. **Reconfigurer** fait la même chose (nouvelle connexion, même foyer) : l'adresse d'une nouvelle entrée n'est pas modifiable.
 - **Supprimer l'intégration** révoque l'accès dans Stockpot (RFC 7009), avec le webhook qu'il avait enregistré ; si la révocation échoue, l'intégration retire au moins le webhook.
 
-### Jeton manuel (secours)
+L'accès est **lié à un foyer** et ne donne que ce qu'utilise l'intégration : lecture des courses et du planning, écritures utiles (courses, consommer / ajouter au stock, planifier, cuisiné, recalculer la liste), jamais l'administration.
 
-Pour un Stockpot antérieur à M17, une instance Home Assistant sans `my`, ou des scripts : dans Stockpot, **Réglages > Home Assistant > Créer un jeton** (capacité `ha`, affiché une seule fois), puis choisissez « Jeton manuel » et collez-le ; choisissez le foyer si le compte en a plusieurs.
+### Entrées créées avant la 0.11.0
 
-Dans les deux cas, l'accès est **lié à un foyer** et ne donne que ce qu'utilise l'intégration : lecture des courses et du planning, écritures utiles (courses, consommer / ajouter au stock, planifier, cuisiné, recalculer la liste), jamais l'administration.
+Le **jeton manuel** n'est plus proposé pour une nouvelle installation. Les entrées existantes continuent de fonctionner sans changement, avec leurs propres réglages :
+
+- **Jeton manuel** (0.9 / 0.10) : l'entrée garde son jeton. Quand Home Assistant demande de se reconnecter, un menu propose « Se connecter avec Stockpot » (à l'adresse de l'entrée) ou « Coller un nouveau jeton » (si ce Home Assistant ne peut pas terminer la connexion : pas de `my`, hôte non autorisé par Stockpot). En cas de connexion réussie (même instance, même foyer), l'entrée passe en OAuth ; l'ancien jeton n'est pas révoqué, supprimez-le dans Stockpot > Réglages > Home Assistant. Lors de cette reconnexion uniquement, si ce Stockpot ne propose pas la connexion de Home Assistant, le formulaire de nouveau jeton s'affiche directement. **Reconfigurer** propose le même menu, l'option jeton permettant aussi, comme en 0.10, de modifier l'adresse et la vérification SSL : seules ces entrées peuvent changer d'adresse.
+- **OAuth avec une autre adresse ou sans vérification SSL** (0.10.0) : l'entrée garde son adresse et son réglage SSL, pour le rafraîchissement comme pour la reconnexion. Pour ces adresses, une instance en `https` qui annonce un point de connexion en `http` est refusée, et le `http` simple n'est accepté que pour une adresse locale (loopback, réseau privé, nom sans point, `.local`, `.lan`, `.home.arpa`, `.internal`). L'adresse n'est pas modifiable, et une nouvelle entrée ne peut viser que `stockpot.arakeo.com`.
+- **Webhook** : Stockpot n'en garde qu'un par foyer (le dernier enregistré l'emporte) ; après le passage en OAuth, l'entrée le réenregistre avec son nouvel accès et un nouveau secret.
+
+### Logo
+
+Le logo Stockpot est fourni dans `custom_components/stockpot/brand/` (`icon.png` 256 px, `icon@2x.png` 512 px, `logo.png` / `logo@2x.png` 128 / 256 px de haut, variantes `dark_*`) : Home Assistant 2026.3+ les sert localement (tuile de l'intégration, assistant, appareils), et HACS les accepte pour sa vérification des marques.
 
 ## Entités
 

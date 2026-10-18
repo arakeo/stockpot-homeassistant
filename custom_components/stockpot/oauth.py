@@ -1,7 +1,8 @@
 """OAuth2 sign-in with Stockpot (Stockpot M17, `docs/oauth-home-assistant.md`).
 
 Public client `home-assistant`, Authorization Code + PKCE S256, scope `ha`. The endpoints come
-from the RFC 8414 discovery document of the instance the user typed (shared with the Claude
+from the RFC 8414 discovery document of the instance: `STOCKPOT_URL` for new entries, the entry's
+own URL for entries created before 0.11.0 (the document is shared with the Claude
 connector: only the three endpoints below are read, extra fields are ignored). Refresh tokens
 rotate; Home Assistant's `OAuth2Session` merges and persists each new pair in the entry.
 """
@@ -55,7 +56,7 @@ class StockpotNotOAuthError(StockpotError):
 
 
 class StockpotOAuthUnsupportedError(StockpotError):
-    """A Stockpot without Home Assistant sign-in (before M17): use a manual token."""
+    """A Stockpot without Home Assistant sign-in (before M17)."""
 
 
 class StockpotInsecureEndpointError(StockpotError):
@@ -63,7 +64,7 @@ class StockpotInsecureEndpointError(StockpotError):
 
 
 class StockpotPublicHttpError(StockpotError):
-    """Plain http to a host that is not loopback or private."""
+    """Plain http to a host that is not loopback or private (pre-0.11 entries' own URL)."""
 
 
 # Removal: never hold up the deletion of the entry for long.
@@ -159,6 +160,9 @@ async def async_discover(hass: HomeAssistant, url: str, verify_ssl: bool) -> OAu
                 headers={"Accept": "application/json"},
                 allow_redirects=False,
             ) as response:
+                if response.status == 429 or response.status >= 500:
+                    # Transient (maintenance, overload): not a reason to give up the sign-in.
+                    raise StockpotConnectionError(f"Discovery answered {response.status}")
                 if response.status != 200:
                     raise StockpotNotOAuthError(f"Discovery answered {response.status}")
                 try:

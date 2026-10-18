@@ -15,7 +15,10 @@ CONF_TOKEN_URL: Final = "token_url"
 CONF_REVOCATION_URL: Final = "revocation_url"
 
 AUTH_METHOD_OAUTH: Final = "oauth"
-AUTH_METHOD_TOKEN: Final = "token"
+
+# The Stockpot instance new entries connect to (0.11.0: nothing to type, SSL always verified).
+# Entries created before 0.11.0 keep their own URL and SSL setting.
+STOCKPOT_URL: Final = "https://stockpot.arakeo.com"
 
 # OAuth2 sign-in (Stockpot M17): public client, PKCE S256, single scope.
 OAUTH_CLIENT_ID: Final = "home-assistant"

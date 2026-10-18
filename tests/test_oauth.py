@@ -20,13 +20,17 @@ from homeassistant.core import HomeAssistant
 from homeassistant.data_entry_flow import FlowResultType
 from homeassistant.helpers import aiohttp_client
 from homeassistant.helpers.config_entry_oauth2_flow import MY_AUTH_CALLBACK_PATH
-from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.components.diagnostics import get_diagnostics_for_config_entry
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker, AiohttpClientMockResponse
 
 from custom_components.stockpot.api import StockpotAuthError
-from custom_components.stockpot.const import CONF_AUTH_METHOD, CONF_HOUSEHOLD_ID, DOMAIN
+from custom_components.stockpot.const import CONF_AUTH_METHOD, CONF_HOUSEHOLD_ID, DOMAIN, STOCKPOT_URL
+from custom_components.stockpot.oauth import (
+    StockpotPublicHttpError,
+    async_discover,
+    implementation_key,
+)
 
 from .conftest import (
     ACCESS_TOKEN,
@@ -39,53 +43,51 @@ from .conftest import (
     REVOKE_URL,
     TOKEN_URL,
     URL,
+    authorize as _authorize,
+    calls as _calls,
     token_response,
 )
 
 HOUSEHOLDS = {"data": [{"id": 7, "name": "Foyer Martin", "role": "owner"}]}
+LEGACY_URL = "https://stockpot.example.org"
 
 
 @pytest.fixture(autouse=True)
-async def oauth_callback(hass: HomeAssistant) -> None:
-    """My Home Assistant redirect (default_config) and the /auth/external/callback view."""
-    hass.config.components.add("my")
-    assert await async_setup_component(hass, "auth", {})
+async def _oauth_callback(oauth_callback: None) -> None:
+    """My Home Assistant redirect and the /auth/external/callback view, for every test."""
 
 
-def _calls(aioclient_mock: AiohttpClientMocker, method: str, url: str) -> list[tuple[Any, Any]]:
-    """(data, headers) of the mocked requests to that URL."""
-    return [(data, headers) for m, u, data, headers in aioclient_mock.mock_calls if m == method and str(u) == url]
+async def _start_oauth(hass: HomeAssistant) -> dict[str, Any]:
+    """« Ajouter l'intégration → Stockpot »: no form, straight to the sign-in (or an error form)."""
+    return await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
 
 
-async def _start_oauth(hass: HomeAssistant, url: str = URL + "/") -> dict[str, Any]:
-    result = await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
-    assert result["type"] is FlowResultType.FORM
-    assert result["step_id"] == "user"
-    return await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_URL: url, CONF_VERIFY_SSL: True, CONF_AUTH_METHOD: "oauth"}
-    )
-
-
-async def _authorize(
-    hass: HomeAssistant, hass_client_no_auth, result: dict[str, Any], answer: str = "code=the-code"
-) -> dict[str, Any]:
-    """The browser comes back from Stockpot's consent screen with a code; the flow resumes."""
-    assert result["type"] is FlowResultType.EXTERNAL_STEP
-    state = parse_qs(urlsplit(result["url"]).query)["state"][0]
-    client = await hass_client_no_auth()
-    response = await client.get(f"/auth/external/callback?{answer}&state={state}")
-    assert response.status == 200
-    return await hass.config_entries.flow.async_configure(result["flow_id"])
+def _discovery_of(url: str) -> dict[str, Any]:
+    return {
+        **DISCOVERY,
+        "issuer": url,
+        "authorization_endpoint": f"{url}/oauth/authorize",
+        "token_endpoint": f"{url}/oauth/token",
+        "revocation_endpoint": f"{url}/oauth/revoke",
+    }
 
 
 async def test_oauth_happy_path(hass: HomeAssistant, hass_client_no_auth, aioclient_mock: AiohttpClientMocker) -> None:
-    """URL only → discovery → PKCE authorize URL → code exchange → entry (instance#household)."""
+    """No form: discovery at STOCKPOT_URL → PKCE authorize URL → code exchange → entry
+    (instance#household), SSL check on and not stored."""
+    assert URL == STOCKPOT_URL == "https://stockpot.arakeo.com"
     aioclient_mock.get(DISCOVERY_URL, json=DISCOVERY)
     aioclient_mock.post(TOKEN_URL, json=token_response())
     aioclient_mock.get(f"{API}/households", json=HOUSEHOLDS)
 
-    result = await _start_oauth(hass)
+    with patch(
+        "custom_components.stockpot.oauth.async_get_clientsession", wraps=aiohttp_client.async_get_clientsession
+    ) as session:
+        result = await _start_oauth(hass)
     assert result["type"] is FlowResultType.EXTERNAL_STEP
+    assert result["step_id"] == "auth"
+    assert [str(url) for _, url, _, _ in aioclient_mock.mock_calls] == [DISCOVERY_URL]
+    assert session.call_args.kwargs["verify_ssl"] is True
     authorize = urlsplit(result["url"])
     query = {key: values[0] for key, values in parse_qs(authorize.query).items()}
     assert f"{authorize.scheme}://{authorize.netloc}{authorize.path}" == AUTHORIZE_URL
@@ -108,6 +110,8 @@ async def test_oauth_happy_path(hass: HomeAssistant, hass_client_no_auth, aiocli
     assert entry.data["token"]["access_token"] == ACCESS_TOKEN
     assert entry.data["token"]["refresh_token"] == REFRESH_TOKEN
     assert entry.data["revocation_url"] == REVOKE_URL
+    assert entry.data["auth_implementation"] == implementation_key(STOCKPOT_URL)
+    assert CONF_VERIFY_SSL not in entry.data
 
     # Public client: no secret; the verifier matches the S256 challenge sent to /oauth/authorize.
     [(form, _)] = _calls(aioclient_mock, "POST", TOKEN_URL)
@@ -169,17 +173,28 @@ async def test_oauth_two_factor_required_after_sign_in(
         # A Stockpot before M17: only the Claude connector's scope.
         ({"json": {**DISCOVERY, "scopes_supported": ["mcp:use"]}}, "oauth_unsupported"),
         ({"exc": TimeoutError()}, "cannot_connect"),
+        # Transient: maintenance, overload.
+        ({"status": 503, "text": "maintenance"}, "cannot_connect"),
+        ({"status": 500, "json": {"message": "Server Error"}}, "cannot_connect"),
+        ({"status": 429, "json": {"message": "Too Many Attempts."}}, "cannot_connect"),
     ],
 )
 async def test_oauth_discovery_errors(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, mock: dict[str, Any], error: str
 ) -> None:
-    """Discovery failure or a non-Stockpot URL: the first step is shown again with an error."""
+    """Discovery failure: a form without any field tells why; submitting it tries again."""
     aioclient_mock.get(DISCOVERY_URL, **mock)
     result = await _start_oauth(hass)
     assert result["type"] is FlowResultType.FORM
     assert result["step_id"] == "user"
     assert result["errors"] == {"base": error}
+    assert result["data_schema"] is None
+    assert result["description_placeholders"]["url"] == STOCKPOT_URL
+
+    aioclient_mock.clear_requests()
+    aioclient_mock.get(DISCOVERY_URL, json=DISCOVERY)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] is FlowResultType.EXTERNAL_STEP
 
 
 async def test_oauth_discovery_tolerates_a_minimal_document(
@@ -305,6 +320,33 @@ async def test_reauth_survives_a_failed_revocation_of_the_previous_access(
     assert oauth_config_entry.data["token"]["refresh_token"] == "refresh-secret-9"
 
 
+@pytest.mark.parametrize(
+    ("mock", "error"),
+    [
+        ({"status": 404, "text": "Not found"}, "not_stockpot"),
+        ({"json": {**DISCOVERY, "scopes_supported": ["mcp:use"]}}, "oauth_unsupported"),
+    ],
+)
+async def test_oauth_entry_reauth_never_offers_a_token(
+    hass: HomeAssistant,
+    aioclient_mock: AiohttpClientMocker,
+    oauth_config_entry: MockConfigEntry,
+    mock: dict[str, Any],
+    error: str,
+) -> None:
+    """An OAuth entry whose Stockpot no longer offers the sign-in: the error on the sign-in
+    form, no menu and no token form."""
+    oauth_config_entry.add_to_hass(hass)
+    aioclient_mock.get(DISCOVERY_URL, **mock)
+    result = await oauth_config_entry.start_reauth_flow(hass)
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reauth_oauth"
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] is FlowResultType.FORM
+    assert result["step_id"] == "reauth_oauth"
+    assert result["errors"] == {"base": error}
+
+
 async def test_reauth_with_another_household_is_refused(
     hass: HomeAssistant, hass_client_no_auth, aioclient_mock: AiohttpClientMocker, oauth_config_entry: MockConfigEntry
 ) -> None:
@@ -329,37 +371,97 @@ async def test_reauth_with_another_household_is_refused(
 async def test_reconfigure_oauth_entry(
     hass: HomeAssistant, hass_client_no_auth, aioclient_mock: AiohttpClientMocker, oauth_config_entry: MockConfigEntry
 ) -> None:
-    """New URL of the same instance: discovery there, sign in again, URL and endpoints updated."""
+    """Reconfigure only signs in again at the entry's URL (no field): new tokens stored, the
+    previous access revoked."""
     oauth_config_entry.add_to_hass(hass)
-    new = "https://stockpot.example.org"
-    aioclient_mock.get(
-        f"{new}/.well-known/oauth-authorization-server",
-        json={
-            **DISCOVERY,
-            "authorization_endpoint": f"{new}/oauth/authorize",
-            "token_endpoint": f"{new}/oauth/token",
-            "revocation_endpoint": f"{new}/oauth/revoke",
-        },
-    )
-    aioclient_mock.post(f"{new}/oauth/token", json=token_response(access="42|stkp_moved", refresh="refresh-moved"))
-    aioclient_mock.get(f"{new}/api/v1/households", json=HOUSEHOLDS)
+    aioclient_mock.get(DISCOVERY_URL, json=DISCOVERY)
+    aioclient_mock.post(TOKEN_URL, json=token_response(access="42|stkp_again", refresh="refresh-again"))
+    aioclient_mock.get(f"{API}/households", json=HOUSEHOLDS)
     aioclient_mock.post(REVOKE_URL, json={})
 
     result = await oauth_config_entry.start_reconfigure_flow(hass)
     assert result["step_id"] == "reconfigure_oauth"
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_URL: new + "/", CONF_VERIFY_SSL: True}
-    )
+    assert result["data_schema"] is None
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     with patch("custom_components.stockpot.async_setup_entry", return_value=True):
         result = await _authorize(hass, hass_client_no_auth, result)
 
     assert result["reason"] == "reconfigure_successful"
-    assert oauth_config_entry.data[CONF_URL] == new
-    assert oauth_config_entry.data["token_url"] == f"{new}/oauth/token"
-    assert oauth_config_entry.data["token"]["access_token"] == "42|stkp_moved"
-    # The previous access is revoked where it was issued.
+    assert oauth_config_entry.data[CONF_URL] == URL
+    assert oauth_config_entry.data["token"]["access_token"] == "42|stkp_again"
     [(form, _)] = _calls(aioclient_mock, "POST", REVOKE_URL)
     assert form["token"] == REFRESH_TOKEN
+
+
+async def test_legacy_oauth_entry_with_custom_url_and_no_ssl_check(
+    hass: HomeAssistant,
+    hass_client_no_auth,
+    aioclient_mock: AiohttpClientMocker,
+    oauth_config_entry: MockConfigEntry,
+    summary: dict[str, Any],
+) -> None:
+    """A 0.10.0 OAuth entry on another URL with the SSL check disabled: it loads and refreshes
+    against its own URL without the check, and its reauth signs in there, settings kept."""
+    legacy = _discovery_of(LEGACY_URL)
+    api = f"{LEGACY_URL}/api/v1"
+    entry = MockConfigEntry(
+        domain=DOMAIN,
+        title="Foyer Martin",
+        unique_id=f"{INSTANCE}#7",
+        data={
+            **oauth_config_entry.data,
+            CONF_URL: LEGACY_URL,
+            CONF_VERIFY_SSL: False,
+            "authorize_url": legacy["authorization_endpoint"],
+            "token_url": legacy["token_endpoint"],
+            "revocation_url": legacy["revocation_endpoint"],
+            "auth_implementation": implementation_key(LEGACY_URL),
+            "token": {**oauth_config_entry.data["token"], "expires_at": time.time() - 10},
+        },
+    )
+    aioclient_mock.post(legacy["token_endpoint"], json=token_response(access="32|stkp_new", refresh="r-2"))
+    aioclient_mock.get(f"{api}/me", json={"data": {"id": 1}, "meta": {"instance_id": INSTANCE}})
+    aioclient_mock.get(f"{api}/ha/summary", json={"data": summary})
+    aioclient_mock.get(f"{api}/shopping-lists/1", json={"data": {"id": 1, "name": "Courses", "items": []}})
+    aioclient_mock.put(f"{api}/households/7/ha-webhook", status=403, json={"code": "forbidden"})
+    with (
+        patch(
+            "custom_components.stockpot.oauth.async_get_clientsession", wraps=aiohttp_client.async_get_clientsession
+        ) as oauth_session,
+        patch(
+            "custom_components.stockpot.async_get_clientsession", wraps=aiohttp_client.async_get_clientsession
+        ) as api_session,
+    ):
+        await _setup(hass, entry)
+
+    assert entry.state is ConfigEntryState.LOADED
+    assert entry.data["token"]["refresh_token"] == "r-2"
+    assert entry.data[CONF_URL] == LEGACY_URL
+    assert entry.data[CONF_VERIFY_SSL] is False
+    assert {call.kwargs["verify_ssl"] for call in oauth_session.call_args_list} == {False}
+    assert {call.kwargs["verify_ssl"] for call in api_session.call_args_list} == {False}
+    assert _calls(aioclient_mock, "POST", TOKEN_URL) == []
+    assert len(_calls(aioclient_mock, "GET", f"{api}/ha/summary")) == 1
+
+    # Reauth: discovery at its own URL, still without the SSL check; settings kept.
+    aioclient_mock.get(f"{LEGACY_URL}/.well-known/oauth-authorization-server", json=legacy)
+    aioclient_mock.get(f"{api}/households", json=HOUSEHOLDS)
+    aioclient_mock.post(legacy["revocation_endpoint"], json={})
+    aioclient_mock.post(legacy["token_endpoint"], json=token_response(access="33|stkp_re", refresh="r-3"))
+    result = await entry.start_reauth_flow(hass)
+    with patch(
+        "custom_components.stockpot.oauth.async_get_clientsession", wraps=aiohttp_client.async_get_clientsession
+    ) as session:
+        result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] is FlowResultType.EXTERNAL_STEP
+    assert result["url"].startswith(legacy["authorization_endpoint"])
+    assert session.call_args.kwargs["verify_ssl"] is False
+    with patch("custom_components.stockpot.async_setup_entry", return_value=True):
+        result = await _authorize(hass, hass_client_no_auth, result)
+    assert result["reason"] == "reauth_successful"
+    assert entry.data[CONF_URL] == LEGACY_URL
+    assert entry.data[CONF_VERIFY_SSL] is False
+    assert entry.data["auth_implementation"] == implementation_key(LEGACY_URL)
 
 
 async def test_removal_revokes_the_refresh_token(
@@ -605,8 +707,8 @@ async def test_flow_in_progress_aborts_and_revokes(
     hass: HomeAssistant, hass_client_no_auth, aioclient_mock: AiohttpClientMocker
 ) -> None:
     """Another flow already holds this household: already_in_progress, the new access revoked."""
-    await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER, "unique_id": f"{INSTANCE}#7"})
     aioclient_mock.get(DISCOVERY_URL, json=DISCOVERY)
+    await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER, "unique_id": f"{INSTANCE}#7"})
     aioclient_mock.post(TOKEN_URL, json=token_response())
     aioclient_mock.get(f"{API}/households", json=HOUSEHOLDS)
     aioclient_mock.post(REVOKE_URL, json={})
@@ -629,9 +731,9 @@ async def test_my_required_warns_once(
     assert result["errors"] == {"base": "my_required"}
     assert _calls(aioclient_mock, "GET", DISCOVERY_URL) == []
 
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_URL: URL, CONF_VERIFY_SSL: True, CONF_AUTH_METHOD: "oauth"}
-    )
+    assert result["data_schema"] is None
+
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["type"] is FlowResultType.EXTERNAL_STEP
     redirect = parse_qs(urlsplit(result["url"]).query)["redirect_uri"][0]
     assert redirect == "https://example.com/auth/external/callback"
@@ -652,9 +754,9 @@ async def test_discovery_redirect_is_not_followed(hass: HomeAssistant, aioclient
 @pytest.mark.parametrize(
     ("field", "value", "error"),
     [
-        ("token_endpoint", "http://stockpot.test/oauth/token", "insecure_endpoint"),
-        ("revocation_endpoint", "http://stockpot.test/oauth/revoke", "insecure_endpoint"),
-        ("authorization_endpoint", "http://stockpot.test/oauth/authorize", "insecure_endpoint"),
+        ("token_endpoint", "http://stockpot.arakeo.com/oauth/token", "insecure_endpoint"),
+        ("revocation_endpoint", "http://stockpot.arakeo.com/oauth/revoke", "insecure_endpoint"),
+        ("authorization_endpoint", "http://stockpot.arakeo.com/oauth/authorize", "insecure_endpoint"),
     ],
 )
 async def test_discovery_scheme_downgrade_is_refused(
@@ -667,52 +769,65 @@ async def test_discovery_scheme_downgrade_is_refused(
 
 
 async def test_http_only_for_private_hosts(hass: HomeAssistant, aioclient_mock: AiohttpClientMocker) -> None:
-    """Plain http: refused for a public host (no request sent), accepted on the LAN."""
-    result = await _start_oauth(hass, "http://stockpot.example.com")
-    assert result["errors"] == {"base": "http_public_host"}
+    """Plain http (pre-0.11 entries' own URL): refused for a public host (no request sent),
+    accepted on the LAN."""
+    with pytest.raises(StockpotPublicHttpError):
+        await async_discover(hass, "http://stockpot.example.com", True)
     assert aioclient_mock.call_count == 0
 
     lan = "http://192.168.1.20:8080"
-    aioclient_mock.get(
-        f"{lan}/.well-known/oauth-authorization-server",
-        json={
-            **DISCOVERY,
-            "issuer": lan,
-            "authorization_endpoint": f"{lan}/oauth/authorize",
-            "token_endpoint": f"{lan}/oauth/token",
-            "revocation_endpoint": f"{lan}/oauth/revoke",
-        },
-    )
-    result = await hass.config_entries.flow.async_configure(
-        result["flow_id"], {CONF_URL: lan, CONF_VERIFY_SSL: True, CONF_AUTH_METHOD: "oauth"}
-    )
-    assert result["type"] is FlowResultType.EXTERNAL_STEP
+    aioclient_mock.get(f"{lan}/.well-known/oauth-authorization-server", json=_discovery_of(lan))
+    endpoints = await async_discover(hass, lan, True)
+    assert endpoints.token_url == f"{lan}/oauth/token"
 
 
 async def test_http_endpoint_on_a_public_host_is_refused(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker
 ) -> None:
-    """LAN URL typed, but an http endpoint on a public host: refused."""
+    """LAN URL, but an http endpoint on a public host: refused."""
     lan = "http://stockpot.lan"
     aioclient_mock.get(
         f"{lan}/.well-known/oauth-authorization-server",
         json={**DISCOVERY, "token_endpoint": "http://stockpot.example.com/oauth/token"},
     )
-    result = await _start_oauth(hass, lan)
+    with pytest.raises(StockpotPublicHttpError):
+        await async_discover(hass, lan, True)
+
+
+async def test_legacy_http_lan_entry_reauth(
+    hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, oauth_config_entry: MockConfigEntry
+) -> None:
+    """A pre-0.11 entry on a plain-http LAN address can still sign in again there; an http
+    endpoint on a public host is reported."""
+    lan = "http://stockpot.lan"
+    entry = MockConfigEntry(domain=DOMAIN, unique_id=f"{INSTANCE}#7", data={**oauth_config_entry.data, CONF_URL: lan})
+    entry.add_to_hass(hass)
+    aioclient_mock.get(
+        f"{lan}/.well-known/oauth-authorization-server",
+        json={**_discovery_of(lan), "token_endpoint": "http://stockpot.example.com/oauth/token"},
+    )
+    result = await entry.start_reauth_flow(hass)
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
     assert result["errors"] == {"base": "http_public_host"}
+
+    aioclient_mock.clear_requests()
+    aioclient_mock.get(f"{lan}/.well-known/oauth-authorization-server", json=_discovery_of(lan))
+    result = await hass.config_entries.flow.async_configure(result["flow_id"], {})
+    assert result["type"] is FlowResultType.EXTERNAL_STEP
+    assert result["url"].startswith(f"{lan}/oauth/authorize")
 
 
 async def test_other_origin_and_issuer_are_logged(
     hass: HomeAssistant, aioclient_mock: AiohttpClientMocker, caplog: pytest.LogCaptureFixture
 ) -> None:
-    """LAN address typed, public APP_URL: accepted, with a warning naming the origins only."""
+    """LAN address of a pre-0.11 entry, public APP_URL: accepted, with a warning naming the
+    origins only."""
     lan = "https://192.168.1.20"
     aioclient_mock.get(f"{lan}/.well-known/oauth-authorization-server", json=DISCOVERY)
     with caplog.at_level(logging.INFO):
-        result = await _start_oauth(hass, lan)
-    assert result["type"] is FlowResultType.EXTERNAL_STEP
-    assert "Stockpot token endpoint is on https://stockpot.test, not on the typed address" in caplog.text
-    assert "Stockpot issuer https://stockpot.test differs" in caplog.text
+        await async_discover(hass, lan, True)
+    assert f"Stockpot token endpoint is on {URL}, not on the typed address" in caplog.text
+    assert f"Stockpot issuer {URL} differs" in caplog.text
 
 
 # --- removal ---------------------------------------------------------------------------

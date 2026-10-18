@@ -5,11 +5,14 @@ from __future__ import annotations
 from copy import deepcopy
 import time
 from typing import Any
+from urllib.parse import parse_qs, urlsplit
 
 import pytest
 
 from homeassistant.const import CONF_TOKEN, CONF_URL, CONF_VERIFY_SSL
 from homeassistant.core import HomeAssistant
+from homeassistant.data_entry_flow import FlowResultType
+from homeassistant.setup import async_setup_component
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
@@ -20,10 +23,12 @@ from custom_components.stockpot.const import (
     CONF_REVOCATION_URL,
     CONF_TOKEN_URL,
     DOMAIN,
+    STOCKPOT_URL,
 )
 from custom_components.stockpot.oauth import implementation_key
 
-URL = "https://stockpot.test"
+# Since 0.11.0 new entries always use the fixed Stockpot URL.
+URL = STOCKPOT_URL
 API = f"{URL}/api/v1"
 TOKEN = "12|stkp_secret"
 INSTANCE = "9b2f4c1e-0000-4000-8000-000000000001"
@@ -292,3 +297,27 @@ def oauth_config_entry() -> MockConfigEntry:
             "token": {**token_response(), "expires_at": time.time() + 3600},
         },
     )
+
+
+@pytest.fixture
+async def oauth_callback(hass: HomeAssistant) -> None:
+    """My Home Assistant redirect (default_config) and the /auth/external/callback view."""
+    hass.config.components.add("my")
+    assert await async_setup_component(hass, "auth", {})
+
+
+def calls(aioclient_mock: AiohttpClientMocker, method: str, url: str) -> list[tuple[Any, Any]]:
+    """(data, headers) of the mocked requests to that URL."""
+    return [(data, headers) for m, u, data, headers in aioclient_mock.mock_calls if m == method and str(u) == url]
+
+
+async def authorize(
+    hass: HomeAssistant, hass_client_no_auth, result: dict[str, Any], answer: str = "code=the-code"
+) -> dict[str, Any]:
+    """The browser comes back from Stockpot's consent screen with a code; the flow resumes."""
+    assert result["type"] is FlowResultType.EXTERNAL_STEP
+    state = parse_qs(urlsplit(result["url"]).query)["state"][0]
+    client = await hass_client_no_auth()
+    response = await client.get(f"/auth/external/callback?{answer}&state={state}")
+    assert response.status == 200
+    return await hass.config_entries.flow.async_configure(result["flow_id"])

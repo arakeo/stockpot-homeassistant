@@ -3,87 +3,79 @@
     "step": {
       "user": {
         "title": "Stockpot",
-        "description": "Connect a Stockpot household. « Sign in with Stockpot » opens Stockpot to choose the household and authorise Home Assistant (needs the My Home Assistant integration, part of default_config). « Manual token » uses a token with the « ha » ability created in Stockpot > Settings > Home Assistant.",
-        "data": {
-          "url": "URL",
-          "verify_ssl": "Verify the SSL certificate",
-          "auth_method": "Sign-in method"
-        },
-        "data_description": {
-          "url": "Address of Stockpot, e.g. https://stockpot.arakeo.com",
-          "verify_ssl": "Disable only for a self-signed certificate on your network.",
-          "auth_method": "Signing in with Stockpot is recommended: no token to copy, renewed automatically."
-        }
+        "description": "Signing in to Stockpot ({url}) could not start. Fix the problem below, then submit to try again."
       },
-      "token": {
-        "title": "Manual token",
-        "description": "Token with the « ha » ability for {url} (Stockpot > Settings > Home Assistant). The token is bound to one household.",
-        "data": {
-          "token": "API token"
-        },
-        "data_description": {
-          "token": "Shown once when created in Stockpot."
-        }
-      },
-      "household": {
-        "title": "Household",
-        "description": "Choose the household to show in Home Assistant.",
-        "data": {
-          "household_id": "Household"
-        }
-      },
-      "reauth_confirm": {
-        "title": "New token",
-        "description": "The token of {url} no longer works. Create a new one with the « ha » ability.",
-        "data": {
-          "token": "API token"
+      "reauth_manual": {
+        "title": "Access lost",
+        "description": "The manual token of {url} no longer works. Sign in with Stockpot (recommended: the entry switches to the sign-in), or paste a new token if this Home Assistant cannot finish the sign-in.",
+        "menu_options": {
+          "reauth_oauth": "Sign in with Stockpot",
+          "reauth_confirm": "Paste a new token"
         }
       },
       "reauth_oauth": {
         "title": "Sign in again",
-        "description": "Home Assistant no longer has access to {url} (access revoked, expired or account removed from the household). Sign in with Stockpot again."
+        "description": "Home Assistant no longer has access to {url} (access revoked, expired or account removed from the household). Sign in with Stockpot to restore it."
       },
-      "reconfigure": {
-        "title": "Stockpot",
-        "description": "Change the address, the token or the SSL check.",
+      "reauth_confirm": {
+        "title": "New token",
+        "description": "Token with the « ha » ability for {url} (Stockpot > Settings > Home Assistant).",
         "data": {
-          "url": "URL",
-          "token": "API token",
-          "verify_ssl": "Verify the SSL certificate"
+          "token": "API token"
+        }
+      },
+      "reconfigure_manual": {
+        "title": "Stockpot",
+        "description": "This entry ({url}) uses a manual token. Sign in with Stockpot (the entry switches to the sign-in), or change the address, the token or the SSL check.",
+        "menu_options": {
+          "reconfigure_oauth": "Sign in with Stockpot",
+          "reconfigure_token": "Change address, token or SSL check"
         }
       },
       "reconfigure_oauth": {
         "title": "Stockpot",
-        "description": "Change the address or the SSL check, then sign in with Stockpot again.",
+        "description": "Sign in with Stockpot again to renew the access of this household ({url})."
+      },
+      "reconfigure_token": {
+        "title": "Stockpot",
+        "description": "Change the address, the token or the SSL check of this household.",
         "data": {
           "url": "URL",
+          "token": "API token",
           "verify_ssl": "Verify the SSL certificate"
         }
       }
     },
     "error": {
       "cannot_connect": "Cannot reach Stockpot.",
-      "ssl_error": "The TLS certificate of Stockpot was refused. Check the URL, or disable the SSL check for a self-signed certificate.",
+      "ssl_error": "The TLS certificate of Stockpot was refused.",
       "invalid_auth": "Invalid, revoked or expired token.",
       "missing_ability": "This token does not have the « ha » ability. Create one in Stockpot > Settings > Home Assistant.",
       "two_factor_required": "This household requires two-factor authentication: enable it on the token's account.",
       "household_forbidden": "This token is bound to another household, or the account is not a member of it.",
-      "no_household": "This account has no household.",
-      "not_stockpot": "No Stockpot sign-in found at this address. Check the URL (e.g. https://stockpot.arakeo.com).",
-      "oauth_unsupported": "This Stockpot does not offer Home Assistant sign-in yet: update it, or choose « Manual token ».",
+      "not_stockpot": "No Stockpot sign-in found at this address.",
+      "oauth_unsupported": "This Stockpot does not offer Home Assistant sign-in yet: it must be updated.",
       "insecure_endpoint": "This Stockpot is on https but advertises an http sign-in endpoint: refused (downgrade). Check its APP_URL.",
       "http_public_host": "Plain http is only accepted for a local address (loopback, private network, .local…). Use https.",
-      "my_required": "The My Home Assistant integration is not enabled: Stockpot redirects to my.home-assistant.io after sign-in. Enable it (default_config or my:), or choose « Manual token ». If your Stockpot administrator added this Home Assistant's address to STOCKPOT_OAUTH_HA_REDIRECT_HOSTS, submit again to continue.",
+      "my_required": "The My Home Assistant integration is not enabled: Stockpot redirects to my.home-assistant.io after sign-in. Enable it (default_config or my:). If your Stockpot administrator added this Home Assistant's address to STOCKPOT_OAUTH_HA_REDIRECT_HOSTS, submit again to continue.",
       "unknown": "Unexpected error."
     },
     "abort": {
       "already_configured": "This household is already configured.",
       "reauth_successful": "Access renewed.",
       "reconfigure_successful": "Configuration updated.",
-      "wrong_instance": "This token or account belongs to another Stockpot instance or household: add it as a new integration.",
+      "wrong_instance": "This token or account belongs to another Stockpot instance or household than this entry. To add another household, add the integration again: new entries connect to stockpot.arakeo.com only.",
       "cannot_connect": "Cannot reach Stockpot.",
       "two_factor_required": "This household requires two-factor authentication: enable it on your Stockpot account.",
-      "unknown": "Unexpected error."
+      "unknown": "Unexpected error.",
+      "already_in_progress": "This household is already being added. Finish the existing configuration first.",
+      "oauth_unauthorized": "Stockpot refused the sign-in (code expired or invalid). Try again.",
+      "user_rejected_authorize": "Access refused on the Stockpot screen.",
+      "oauth_error": "Stockpot returned invalid token data.",
+      "oauth_failed": "Error while obtaining the access token from Stockpot.",
+      "oauth_timeout": "Timeout while obtaining the access token from Stockpot.",
+      "authorize_url_timeout": "Timeout while preparing the Stockpot sign-in.",
+      "no_url_available": "No URL available for this Home Assistant: set its address in Settings > System > Network."
     }
   },
   "entity": {
@@ -206,12 +198,6 @@
     }
   },
   "selector": {
-    "auth_method": {
-      "options": {
-        "oauth": "Sign in with Stockpot (recommended)",
-        "token": "Manual token"
-      }
-    },
     "meal_type": {
       "options": {
         "breakfast": "Breakfast",
