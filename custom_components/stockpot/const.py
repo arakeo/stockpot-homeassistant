@@ -9,6 +9,18 @@ DOMAIN: Final = "stockpot"
 
 CONF_HOUSEHOLD_ID: Final = "household_id"
 CONF_WEBHOOK_SECRET: Final = "webhook_secret"
+CONF_AUTH_METHOD: Final = "auth_method"
+CONF_AUTHORIZE_URL: Final = "authorize_url"
+CONF_TOKEN_URL: Final = "token_url"
+CONF_REVOCATION_URL: Final = "revocation_url"
+
+AUTH_METHOD_OAUTH: Final = "oauth"
+AUTH_METHOD_TOKEN: Final = "token"
+
+# OAuth2 sign-in (Stockpot M17): public client, PKCE S256, single scope.
+OAUTH_CLIENT_ID: Final = "home-assistant"
+OAUTH_SCOPE: Final = "ha"
+OAUTH_DISCOVERY_PATH: Final = "/.well-known/oauth-authorization-server"
 
 UPDATE_INTERVAL: Final = timedelta(seconds=60)
 REQUEST_TIMEOUT: Final = 15

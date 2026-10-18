@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
+import time
 from typing import Any
 
 import pytest
@@ -12,12 +13,40 @@ from homeassistant.core import HomeAssistant
 from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
-from custom_components.stockpot.const import CONF_HOUSEHOLD_ID, DOMAIN
+from custom_components.stockpot.const import (
+    CONF_AUTH_METHOD,
+    CONF_AUTHORIZE_URL,
+    CONF_HOUSEHOLD_ID,
+    CONF_REVOCATION_URL,
+    CONF_TOKEN_URL,
+    DOMAIN,
+)
+from custom_components.stockpot.oauth import implementation_key
 
 URL = "https://stockpot.test"
 API = f"{URL}/api/v1"
 TOKEN = "12|stkp_secret"
 INSTANCE = "9b2f4c1e-0000-4000-8000-000000000001"
+
+# OAuth (Stockpot M17): discovery document shared with the Claude connector (extra fields).
+DISCOVERY_URL = f"{URL}/.well-known/oauth-authorization-server"
+AUTHORIZE_URL = f"{URL}/oauth/authorize"
+TOKEN_URL = f"{URL}/oauth/token"
+REVOKE_URL = f"{URL}/oauth/revoke"
+DISCOVERY: dict[str, Any] = {
+    "issuer": URL,
+    "authorization_endpoint": AUTHORIZE_URL,
+    "token_endpoint": TOKEN_URL,
+    "revocation_endpoint": REVOKE_URL,
+    "registration_endpoint": f"{URL}/oauth/register",
+    "response_types_supported": ["code"],
+    "grant_types_supported": ["authorization_code", "refresh_token"],
+    "code_challenge_methods_supported": ["S256"],
+    "token_endpoint_auth_methods_supported": ["none", "client_secret_basic", "client_secret_post"],
+    "scopes_supported": ["mcp:use", "ha"],
+}
+ACCESS_TOKEN = "31|stkp_oauth_access"
+REFRESH_TOKEN = "refresh-secret-1"
 
 SUMMARY: dict[str, Any] = {
     "household": {"id": 7, "name": "Foyer Martin", "drive_order_weekday": 3, "expiry_alert_days": 3},
@@ -228,3 +257,38 @@ async def setup_integration(
     assert await hass.config_entries.async_setup(config_entry.entry_id)
     await hass.async_block_till_done()
     return config_entry
+
+
+def token_response(access: str = ACCESS_TOKEN, refresh: str = REFRESH_TOKEN, **extra: Any) -> dict[str, Any]:
+    """POST /oauth/token answer, with the `household_id` / `instance_id` extensions."""
+    return {
+        "access_token": access,
+        "token_type": "Bearer",
+        "expires_in": 3600,
+        "refresh_token": refresh,
+        "scope": "ha",
+        "household_id": 7,
+        "instance_id": INSTANCE,
+        **extra,
+    }
+
+
+@pytest.fixture
+def oauth_config_entry() -> MockConfigEntry:
+    """A household connected with the OAuth sign-in (valid access token)."""
+    return MockConfigEntry(
+        domain=DOMAIN,
+        title="Foyer Martin",
+        unique_id=f"{INSTANCE}#7",
+        data={
+            CONF_URL: URL,
+            CONF_VERIFY_SSL: True,
+            CONF_AUTHORIZE_URL: AUTHORIZE_URL,
+            CONF_TOKEN_URL: TOKEN_URL,
+            CONF_REVOCATION_URL: REVOKE_URL,
+            CONF_AUTH_METHOD: "oauth",
+            CONF_HOUSEHOLD_ID: 7,
+            "auth_implementation": implementation_key(URL),
+            "token": {**token_response(), "expires_at": time.time() + 3600},
+        },
+    )

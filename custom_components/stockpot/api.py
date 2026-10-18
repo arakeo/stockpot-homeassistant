@@ -1,12 +1,16 @@
 """Client of the Stockpot API (/api/v1), as used by the Home Assistant integration.
 
-Authentication: personal access token with the `ha` ability (Bearer). The household is
-chosen with the `X-Household` header. Errors follow RFC 7807 (`code` member).
+Authentication (Bearer): a personal access token with the `ha` ability, or an OAuth access
+token (Stockpot M17), which behaves exactly like a household-bound `ha` token. With OAuth, a
+token provider returns a valid access token before each request (refreshed by Home Assistant's
+`OAuth2Session`). The household is chosen with the `X-Household` header. Errors follow
+RFC 7807 (`code` member).
 """
 
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any
 from urllib.parse import quote
@@ -55,6 +59,10 @@ class StockpotApiError(StockpotError):
         return self.detail or self.code
 
 
+type TokenProvider = Callable[[str | None], Awaitable[str]]
+"""Returns a valid access token; given the token Stockpot just refused (401), renews it first."""
+
+
 def new_idempotency_key() -> str:
     """One key per action: Stockpot replays a retried request instead of applying it twice."""
     return f"ha-{uuid.uuid4()}"
@@ -69,11 +77,16 @@ class StockpotClient:
         url: str,
         token: str,
         household_id: int | None = None,
+        *,
+        token_provider: TokenProvider | None = None,
     ) -> None:
-        """Create the client (`url` = origin of the Stockpot instance)."""
+        """Create the client (`url` = origin of the Stockpot instance).
+
+        `token_provider` (OAuth entries) replaces the fixed `token`."""
         self._session = session
         self._base = url.rstrip("/") + "/api/v1"
         self._token = token
+        self._token_provider = token_provider
         self.household_id = household_id
 
     async def _request(
@@ -90,9 +103,18 @@ class StockpotClient:
         (at most IDEMPOTENT_RETRIES times) with the SAME key: Stockpot replays the action
         instead of applying it twice."""
         attempt = 0
+        refused: str | None = None
         while True:
+            token = await self._access_token(refused)
             try:
-                return await self._send(method, path, json, params, idempotency_key, household)
+                return await self._send(method, path, json, params, idempotency_key, household, token)
+            except StockpotAuthError:
+                # OAuth: an access token refused before its expiry (revoked, clock skew) is
+                # renewed once; a second 401 means the access itself is gone → reauth.
+                if self._token_provider is None or refused is not None:
+                    raise
+                refused = token
+                continue
             except StockpotSslError:
                 raise
             except (StockpotConnectionError, StockpotApiError) as err:
@@ -102,6 +124,12 @@ class StockpotClient:
                 attempt += 1
                 await asyncio.sleep(RETRY_DELAY * attempt)
 
+    async def _access_token(self, refused: str | None) -> str:
+        """Token of the next request (fixed, or from the OAuth token provider)."""
+        if self._token_provider is not None:
+            return await self._token_provider(refused)
+        return self._token
+
     async def _send(
         self,
         method: str,
@@ -110,9 +138,10 @@ class StockpotClient:
         params: dict[str, Any] | None,
         idempotency_key: str | None,
         household: bool,
+        token: str,
     ) -> Any:
         headers = {
-            "Authorization": f"Bearer {self._token}",
+            "Authorization": f"Bearer {token}",
             "Accept": "application/json",
         }
         if household and self.household_id is not None:

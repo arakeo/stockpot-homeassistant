@@ -3,16 +3,26 @@
     "step": {
       "user": {
         "title": "Stockpot",
-        "description": "Connect a Stockpot instance with a token having the « ha » ability (Stockpot > Settings > Home Assistant). The token is bound to one household.",
+        "description": "Connect a Stockpot household. « Sign in with Stockpot » opens Stockpot to choose the household and authorise Home Assistant (needs the My Home Assistant integration, part of default_config). « Manual token » uses a token with the « ha » ability created in Stockpot > Settings > Home Assistant.",
         "data": {
           "url": "URL",
-          "token": "API token",
-          "verify_ssl": "Verify the SSL certificate"
+          "verify_ssl": "Verify the SSL certificate",
+          "auth_method": "Sign-in method"
         },
         "data_description": {
           "url": "Address of Stockpot, e.g. https://stockpot.arakeo.com",
-          "token": "Shown once when created in Stockpot.",
-          "verify_ssl": "Disable only for a self-signed certificate on your network."
+          "verify_ssl": "Disable only for a self-signed certificate on your network.",
+          "auth_method": "Signing in with Stockpot is recommended: no token to copy, renewed automatically."
+        }
+      },
+      "token": {
+        "title": "Manual token",
+        "description": "Token with the « ha » ability for {url} (Stockpot > Settings > Home Assistant). The token is bound to one household.",
+        "data": {
+          "token": "API token"
+        },
+        "data_description": {
+          "token": "Shown once when created in Stockpot."
         }
       },
       "household": {
@@ -29,12 +39,24 @@
           "token": "API token"
         }
       },
+      "reauth_oauth": {
+        "title": "Sign in again",
+        "description": "Home Assistant no longer has access to {url} (access revoked, expired or account removed from the household). Sign in with Stockpot again."
+      },
       "reconfigure": {
         "title": "Stockpot",
         "description": "Change the address, the token or the SSL check.",
         "data": {
           "url": "URL",
           "token": "API token",
+          "verify_ssl": "Verify the SSL certificate"
+        }
+      },
+      "reconfigure_oauth": {
+        "title": "Stockpot",
+        "description": "Change the address or the SSL check, then sign in with Stockpot again.",
+        "data": {
+          "url": "URL",
           "verify_ssl": "Verify the SSL certificate"
         }
       }
@@ -47,13 +69,21 @@
       "two_factor_required": "This household requires two-factor authentication: enable it on the token's account.",
       "household_forbidden": "This token is bound to another household, or the account is not a member of it.",
       "no_household": "This account has no household.",
+      "not_stockpot": "No Stockpot sign-in found at this address. Check the URL (e.g. https://stockpot.arakeo.com).",
+      "oauth_unsupported": "This Stockpot does not offer Home Assistant sign-in yet: update it, or choose « Manual token ».",
+      "insecure_endpoint": "This Stockpot is on https but advertises an http sign-in endpoint: refused (downgrade). Check its APP_URL.",
+      "http_public_host": "Plain http is only accepted for a local address (loopback, private network, .local…). Use https.",
+      "my_required": "The My Home Assistant integration is not enabled: Stockpot redirects to my.home-assistant.io after sign-in. Enable it (default_config or my:), or choose « Manual token ». If your Stockpot administrator added this Home Assistant's address to STOCKPOT_OAUTH_HA_REDIRECT_HOSTS, submit again to continue.",
       "unknown": "Unexpected error."
     },
     "abort": {
       "already_configured": "This household is already configured.",
-      "reauth_successful": "Token updated.",
+      "reauth_successful": "Access renewed.",
       "reconfigure_successful": "Configuration updated.",
-      "wrong_instance": "This token belongs to another Stockpot instance or household: add it as a new integration."
+      "wrong_instance": "This token or account belongs to another Stockpot instance or household: add it as a new integration.",
+      "cannot_connect": "Cannot reach Stockpot.",
+      "two_factor_required": "This household requires two-factor authentication: enable it on your Stockpot account.",
+      "unknown": "Unexpected error."
     }
   },
   "entity": {
@@ -176,6 +206,12 @@
     }
   },
   "selector": {
+    "auth_method": {
+      "options": {
+        "oauth": "Sign in with Stockpot (recommended)",
+        "token": "Manual token"
+      }
+    },
     "meal_type": {
       "options": {
         "breakfast": "Breakfast",

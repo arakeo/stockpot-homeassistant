@@ -3,16 +3,26 @@
     "step": {
       "user": {
         "title": "Stockpot",
-        "description": "Connectez une instance Stockpot avec un jeton ayant la capacité « ha » (Stockpot > Réglages > Home Assistant). Le jeton est lié à un foyer.",
+        "description": "Connectez un foyer Stockpot. « Se connecter avec Stockpot » ouvre Stockpot pour choisir le foyer et autoriser Home Assistant (nécessite l'intégration My Home Assistant, incluse dans default_config). « Jeton manuel » utilise un jeton ayant la capacité « ha » créé dans Stockpot > Réglages > Home Assistant.",
         "data": {
           "url": "URL",
-          "token": "Jeton d'API",
-          "verify_ssl": "Vérifier le certificat SSL"
+          "verify_ssl": "Vérifier le certificat SSL",
+          "auth_method": "Méthode de connexion"
         },
         "data_description": {
           "url": "Adresse de Stockpot, ex. https://stockpot.arakeo.com",
-          "token": "Affiché une seule fois à sa création dans Stockpot.",
-          "verify_ssl": "À désactiver seulement pour un certificat auto-signé sur votre réseau."
+          "verify_ssl": "À désactiver seulement pour un certificat auto-signé sur votre réseau.",
+          "auth_method": "La connexion avec Stockpot est recommandée : aucun jeton à copier, renouvellement automatique."
+        }
+      },
+      "token": {
+        "title": "Jeton manuel",
+        "description": "Jeton ayant la capacité « ha » pour {url} (Stockpot > Réglages > Home Assistant). Le jeton est lié à un foyer.",
+        "data": {
+          "token": "Jeton d'API"
+        },
+        "data_description": {
+          "token": "Affiché une seule fois à sa création dans Stockpot."
         }
       },
       "household": {
@@ -29,12 +39,24 @@
           "token": "Jeton d'API"
         }
       },
+      "reauth_oauth": {
+        "title": "Se reconnecter",
+        "description": "Home Assistant n'a plus accès à {url} (accès révoqué, expiré ou compte retiré du foyer). Reconnectez-vous avec Stockpot."
+      },
       "reconfigure": {
         "title": "Stockpot",
         "description": "Modifiez l'adresse, le jeton ou la vérification SSL.",
         "data": {
           "url": "URL",
           "token": "Jeton d'API",
+          "verify_ssl": "Vérifier le certificat SSL"
+        }
+      },
+      "reconfigure_oauth": {
+        "title": "Stockpot",
+        "description": "Modifiez l'adresse ou la vérification SSL, puis reconnectez-vous avec Stockpot.",
+        "data": {
+          "url": "URL",
           "verify_ssl": "Vérifier le certificat SSL"
         }
       }
@@ -47,13 +69,21 @@
       "two_factor_required": "Ce foyer exige la double authentification : activez-la sur le compte du jeton.",
       "household_forbidden": "Ce jeton est lié à un autre foyer, ou le compte n'en est pas membre.",
       "no_household": "Ce compte n'a aucun foyer.",
+      "not_stockpot": "Aucune connexion Stockpot trouvée à cette adresse. Vérifiez l'URL (ex. https://stockpot.arakeo.com).",
+      "oauth_unsupported": "Ce Stockpot ne propose pas encore la connexion de Home Assistant : mettez-le à jour, ou choisissez « Jeton manuel ».",
+      "insecure_endpoint": "Ce Stockpot est en https mais annonce un point de connexion en http : refusé (rétrogradation). Vérifiez son APP_URL.",
+      "http_public_host": "Le http simple n'est accepté que pour une adresse locale (loopback, réseau privé, .local…). Utilisez https.",
+      "my_required": "L'intégration My Home Assistant n'est pas activée : après la connexion, Stockpot redirige vers my.home-assistant.io. Activez-la (default_config ou my:), ou choisissez « Jeton manuel ». Si l'administrateur de Stockpot a ajouté l'adresse de ce Home Assistant à STOCKPOT_OAUTH_HA_REDIRECT_HOSTS, validez à nouveau pour continuer.",
       "unknown": "Erreur inattendue."
     },
     "abort": {
       "already_configured": "Ce foyer est déjà configuré.",
-      "reauth_successful": "Jeton mis à jour.",
+      "reauth_successful": "Accès renouvelé.",
       "reconfigure_successful": "Configuration mise à jour.",
-      "wrong_instance": "Ce jeton appartient à une autre instance de Stockpot ou à un autre foyer : ajoutez-le comme nouvelle intégration."
+      "wrong_instance": "Ce jeton ou ce compte appartient à une autre instance de Stockpot ou à un autre foyer : ajoutez-le comme nouvelle intégration.",
+      "cannot_connect": "Impossible de joindre Stockpot.",
+      "two_factor_required": "Ce foyer exige la double authentification : activez-la sur votre compte Stockpot.",
+      "unknown": "Erreur inattendue."
     }
   },
   "entity": {
@@ -176,6 +206,12 @@
     }
   },
   "selector": {
+    "auth_method": {
+      "options": {
+        "oauth": "Se connecter avec Stockpot (recommandé)",
+        "token": "Jeton manuel"
+      }
+    },
     "meal_type": {
       "options": {
         "breakfast": "Petit-déjeuner",

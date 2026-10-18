@@ -179,7 +179,7 @@ async def test_a_failed_action_is_retried_with_the_same_key(
     """Timeout then success: the same Idempotency-Key is sent again (Stockpot replays)."""
     calls: list[str | None] = []
 
-    async def send(method, path, json, params, key, household):
+    async def send(method, path, json, params, key, household, token):
         if key is None:  # coordinator refresh after the action
             return {"data": SUMMARY} if path == "/ha/summary" else shopping_list()
         calls.append(key)

@@ -3,16 +3,28 @@
 Intégration personnalisée (HACS) de [Stockpot](https://stockpot.arakeo.com) : listes de courses, planning des repas, alertes de stock et actions.
 
 - **Home Assistant** : 2026.10 ou plus récent (voir `hacs.json`).
-- **Stockpot** : M8 ou plus récent (API `/api/v1`, endpoints `/ha/*`).
+- **Stockpot** : M8 ou plus récent (API `/api/v1`, endpoints `/ha/*`) pour le jeton manuel. « Se connecter avec Stockpot » (OAuth2) exige **Stockpot M17** tel que fusionné (PR #27 : un accès distinct par connexion). La version 0.10.0 n'est publiée qu'après le déploiement de M17.
 
 ## Installation
 
 1. HACS > Intégrations > ⋮ > Dépôts personnalisés : ajoutez ce dépôt (catégorie « Intégration »), puis installez **Stockpot**. Sans HACS : copiez `custom_components/stockpot` dans le dossier `config/custom_components/` de Home Assistant.
 2. Redémarrez Home Assistant.
-3. Dans Stockpot : **Réglages > Home Assistant > Créer un jeton** (capacité `ha`, affiché une seule fois).
-4. Dans Home Assistant : **Paramètres > Appareils et services > Ajouter une intégration > Stockpot** : URL de Stockpot, jeton, vérification SSL, puis le foyer si le compte en a plusieurs.
+3. Dans Home Assistant : **Paramètres > Appareils et services > Ajouter une intégration > Stockpot** : URL de Stockpot (ex. `https://stockpot.arakeo.com`), vérification SSL, puis la méthode de connexion.
 
-Le jeton `ha` est **lié à un foyer** et ne donne que ce qu'utilise l'intégration : lecture des courses et du planning, écritures utiles (courses, consommer / ajouter au stock, planifier, cuisiné, recalculer la liste), jamais l'administration.
+### Se connecter avec Stockpot (recommandé)
+
+Home Assistant lit le document de découverte de l'instance (`/.well-known/oauth-authorization-server`) et ouvre Stockpot dans un nouvel onglet : connexion habituelle (Google + double authentification), choix du foyer, **Autoriser**. L'onglet se ferme et l'intégration est créée pour ce foyer. Aucun jeton à copier : l'accès est renouvelé automatiquement (jeton d'accès d'une heure, refresh token tournant).
+
+- **Prérequis : l'intégration [My Home Assistant](https://www.home-assistant.io/integrations/my/)** (`my`, incluse dans `default_config`). Stockpot renvoie le navigateur vers `https://my.home-assistant.io/redirect/oauth`, qui le ramène à votre Home Assistant. Sans `my`, l'assistant affiche un avertissement : Home Assistant utiliserait `https://<votre-ha>/auth/external/callback`, que Stockpot n'accepte que si l'hôte figure dans `STOCKPOT_OAUTH_HA_REDIRECT_HOSTS` ; validez à nouveau pour continuer dans ce cas.
+- **Transport** : une instance en `https` qui annonce un point de connexion en `http` est refusée ; le `http` simple n'est accepté que pour une adresse locale (loopback, réseau privé, nom sans point, `.local`, `.lan`, `.home.arpa`, `.internal`). Une adresse locale saisie alors que Stockpot annonce son adresse publique (`APP_URL`) est acceptée, avec un avertissement dans le journal.
+- Si l'accès est révoqué (Stockpot > Réglages > Home Assistant > Déconnecter), expiré (90 jours sans usage) ou si le compte quitte le foyer, Home Assistant demande de **se reconnecter** (réauthentification) ; l'ancien accès est alors révoqué.
+- **Supprimer l'intégration** révoque l'accès dans Stockpot (RFC 7009), avec le webhook qu'il avait enregistré ; si la révocation échoue, l'intégration retire au moins le webhook.
+
+### Jeton manuel (secours)
+
+Pour un Stockpot antérieur à M17, une instance Home Assistant sans `my`, ou des scripts : dans Stockpot, **Réglages > Home Assistant > Créer un jeton** (capacité `ha`, affiché une seule fois), puis choisissez « Jeton manuel » et collez-le ; choisissez le foyer si le compte en a plusieurs.
+
+Dans les deux cas, l'accès est **lié à un foyer** et ne donne que ce qu'utilise l'intégration : lecture des courses et du planning, écritures utiles (courses, consommer / ajouter au stock, planifier, cuisiné, recalculer la liste), jamais l'administration.
 
 ## Entités
 
@@ -38,7 +50,7 @@ Les trois capteurs de santé sont indisponibles avec une version de Stockpot ant
 
 ## Rafraîchissement
 
-Interrogation toutes les 60 s, plus un **webhook** : au démarrage, l'intégration enregistre un webhook Home Assistant et donne son URL à Stockpot (jeton du **propriétaire** du foyer). Stockpot n'appelle que les hôtes de sa variable `STOCKPOT_HA_WEBHOOK_HOSTS` et signe chaque notification (`X-Stockpot-Signature: sha256=HMAC(secret, "<timestamp>.<corps>")`, `X-Stockpot-Timestamp`, fenêtre de 5 min). Sans webhook, l'interrogation suffit.
+Interrogation toutes les 60 s, plus un **webhook** : au démarrage, l'intégration enregistre un webhook Home Assistant et donne son URL à Stockpot (accès du **propriétaire** du foyer ; pour un membre, Stockpot répond 403 et l'intégration se contente de l'interrogation). Stockpot n'appelle que les hôtes de sa variable `STOCKPOT_HA_WEBHOOK_HOSTS` et signe chaque notification (`X-Stockpot-Signature: sha256=HMAC(secret, "<timestamp>.<corps>")`, `X-Stockpot-Timestamp`, fenêtre de 5 min). Sans webhook, l'interrogation suffit.
 
 ## Carte « Page web » (iframe)
 

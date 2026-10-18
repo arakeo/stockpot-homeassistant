@@ -1,4 +1,7 @@
-"""Config flow: success, invalid token, SSL, missing `ha` ability, households, reauth, reconfigure."""
+"""Manual token config flow: success, invalid token, SSL, missing `ha` ability, households, reauth, reconfigure.
+
+Since 0.10.0 the first step also asks for the sign-in method; « Jeton manuel » then asks for
+the token, and the rest is unchanged (OAuth: test_oauth.py)."""
 
 from __future__ import annotations
 
@@ -13,7 +16,7 @@ from pytest_homeassistant_custom_component.common import MockConfigEntry
 from pytest_homeassistant_custom_component.test_util.aiohttp import AiohttpClientMocker
 
 from custom_components.stockpot.api import StockpotSslError
-from custom_components.stockpot.const import CONF_HOUSEHOLD_ID, DOMAIN
+from custom_components.stockpot.const import CONF_AUTH_METHOD, CONF_HOUSEHOLD_ID, DOMAIN
 
 from .conftest import API, INSTANCE, TOKEN, URL
 
@@ -24,13 +27,23 @@ async def _start(hass: HomeAssistant):
     return await hass.config_entries.flow.async_init(DOMAIN, context={"source": SOURCE_USER})
 
 
+async def _manual(hass: HomeAssistant, flow_id: str, user_input: dict):
+    """First step with « Jeton manuel », then the token step."""
+    result = await hass.config_entries.flow.async_configure(
+        flow_id,
+        {CONF_URL: user_input[CONF_URL], CONF_VERIFY_SSL: user_input[CONF_VERIFY_SSL], CONF_AUTH_METHOD: "token"},
+    )
+    assert result["step_id"] == "token"
+    return await hass.config_entries.flow.async_configure(flow_id, {CONF_TOKEN: user_input[CONF_TOKEN]})
+
+
 async def test_success_with_one_household(hass: HomeAssistant, mock_api: AiohttpClientMocker) -> None:
     """One household: created at once, URL normalised, token kept."""
     result = await _start(hass)
     assert result["type"] is FlowResultType.FORM
 
     with patch("custom_components.stockpot.async_setup_entry", return_value=True):
-        result = await hass.config_entries.flow.async_configure(result["flow_id"], USER_INPUT)
+        result = await _manual(hass, result["flow_id"], USER_INPUT)
 
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["title"] == "Foyer Martin"
@@ -46,7 +59,7 @@ async def test_invalid_token(hass: HomeAssistant, aioclient_mock: AiohttpClientM
     """401 → invalid_auth."""
     aioclient_mock.get(f"{API}/me", status=401, json={"code": "unauthenticated"})
     result = await _start(hass)
-    result = await hass.config_entries.flow.async_configure(result["flow_id"], USER_INPUT)
+    result = await _manual(hass, result["flow_id"], USER_INPUT)
     assert result["type"] is FlowResultType.FORM
     assert result["errors"] == {"base": "invalid_auth"}
 
@@ -57,7 +70,7 @@ async def test_missing_ha_ability(hass: HomeAssistant, aioclient_mock: AiohttpCl
     aioclient_mock.get(f"{API}/households", json={"data": [{"id": 7, "name": "Foyer Martin"}]})
     aioclient_mock.get(f"{API}/ha/summary", status=403, json={"code": "missing_ability", "abilities": ["ha"]})
     result = await _start(hass)
-    result = await hass.config_entries.flow.async_configure(result["flow_id"], USER_INPUT)
+    result = await _manual(hass, result["flow_id"], USER_INPUT)
     assert result["errors"] == {"base": "missing_ability"}
 
 
@@ -67,8 +80,9 @@ async def test_ssl_error_then_without_ssl_check(hass: HomeAssistant, mock_api: A
     with patch(
         "custom_components.stockpot.config_flow.StockpotClient.instance_id", side_effect=StockpotSslError("cert")
     ):
-        result = await hass.config_entries.flow.async_configure(result["flow_id"], USER_INPUT)
+        result = await _manual(hass, result["flow_id"], USER_INPUT)
     assert result["errors"] == {"base": "ssl_error"}
+    assert result["step_id"] == "user"  # back to the URL / SSL check
 
     with (
         patch(
@@ -77,9 +91,7 @@ async def test_ssl_error_then_without_ssl_check(hass: HomeAssistant, mock_api: A
         ) as session,
         patch("custom_components.stockpot.async_setup_entry", return_value=True),
     ):
-        result = await hass.config_entries.flow.async_configure(
-            result["flow_id"], {**USER_INPUT, CONF_VERIFY_SSL: False}
-        )
+        result = await _manual(hass, result["flow_id"], {**USER_INPUT, CONF_VERIFY_SSL: False})
     assert result["type"] is FlowResultType.CREATE_ENTRY
     assert result["data"][CONF_VERIFY_SSL] is False
     assert session.call_args.kwargs["verify_ssl"] is False
@@ -89,7 +101,7 @@ async def test_cannot_connect(hass: HomeAssistant, aioclient_mock: AiohttpClient
     """Network error → cannot_connect."""
     aioclient_mock.get(f"{API}/me", exc=TimeoutError())
     result = await _start(hass)
-    result = await hass.config_entries.flow.async_configure(result["flow_id"], USER_INPUT)
+    result = await _manual(hass, result["flow_id"], USER_INPUT)
     assert result["errors"] == {"base": "cannot_connect"}
 
 
@@ -101,7 +113,7 @@ async def test_choose_household(hass: HomeAssistant, aioclient_mock: AiohttpClie
     )
     aioclient_mock.get(f"{API}/ha/summary", json={"data": {}})
     result = await _start(hass)
-    result = await hass.config_entries.flow.async_configure(result["flow_id"], USER_INPUT)
+    result = await _manual(hass, result["flow_id"], USER_INPUT)
     assert result["step_id"] == "household"
     with patch("custom_components.stockpot.async_setup_entry", return_value=True):
         result = await hass.config_entries.flow.async_configure(result["flow_id"], {CONF_HOUSEHOLD_ID: "8"})
@@ -116,7 +128,7 @@ async def test_already_configured(
     """The same household of the same instance cannot be added twice."""
     config_entry.add_to_hass(hass)
     result = await _start(hass)
-    result = await hass.config_entries.flow.async_configure(result["flow_id"], USER_INPUT)
+    result = await _manual(hass, result["flow_id"], USER_INPUT)
     assert result["type"] is FlowResultType.ABORT
     assert result["reason"] == "already_configured"
 
