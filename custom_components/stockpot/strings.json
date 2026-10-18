@@ -388,5 +388,27 @@
         }
       }
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Stockpot panel",
+        "description": "Stockpot in the Home Assistant sidebar, signed in with the Stockpot account that connected this integration (actions in the panel are made in its name). Administration (household settings, people, account) opens in Stockpot.",
+        "data": {
+          "panel_enabled": "Show the panel",
+          "panel_admin_only": "Administrators only"
+        },
+        "data_description": {
+          "panel_enabled": "Adds « Stockpot » to the sidebar. Needs the « Sign in with Stockpot » connection, with the panel allowed in Stockpot.",
+          "panel_admin_only": "Only Home Assistant administrators see the panel."
+        }
+      }
+    }
+  },
+  "issues": {
+    "panel_requires_oauth": {
+      "title": "Stockpot panel needs « Sign in with Stockpot »",
+      "description": "The household « {title} » is connected with a manual token, which cannot open the Stockpot panel. Open Settings › Devices & services › Stockpot › Reconfigure, then choose « Sign in with Stockpot ». Or turn the panel off in the integration's options."
+    }
   }
 }

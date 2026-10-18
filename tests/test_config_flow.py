@@ -439,11 +439,13 @@ def test_flow_strings_match_the_flow() -> None:
     source = (COMPONENT / "config_flow.py").read_text(encoding="utf-8")
     for step in STEPS:
         assert f'"{step}"' in source, step
-    assert {f"{step}" for step in re.findall(r'step_id="(\w+)"', source)} <= STEPS
+    # `init`: the options flow (the Stockpot panel, 0.12.0), checked below.
+    assert {f"{step}" for step in re.findall(r'step_id="(\w+)"', source)} <= STEPS | {"init"}
     # Literal errors, plus the API codes passed through as `{"base": err.code}`.
     errors = set(re.findall(r'"base": "(\w+)"', source)) | {"two_factor_required", "household_forbidden"}
     assert set(re.findall(r'reason="(\w+)"', source)) <= ABORTS
     for name in ("strings.json", "translations/en.json", "translations/fr.json"):
+        assert set(_load(name)["options"]["step"]) == {"init"}, name
         config = _load(name)["config"]
         assert set(config["step"]) == STEPS, name
         for menu, options in MENUS.items():

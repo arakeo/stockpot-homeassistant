@@ -267,6 +267,15 @@ class StockpotClient:
             idempotency_key=new_idempotency_key(),
         )
 
+    # --- panel -------------------------------------------------------------------
+
+    async def panel_code(self) -> dict[str, Any]:
+        """A single-use code for the Stockpot panel (Stockpot M18): `{code, expires_in}`.
+
+        Needs an OAuth access token of a grant whose panel is enabled (403 `panel_disabled` /
+        `panel_requires_oauth` otherwise)."""
+        return await self._request("POST", "/ha/panel-codes")
+
     # --- webhook -----------------------------------------------------------------
 
     async def register_webhook(self, url: str) -> str:

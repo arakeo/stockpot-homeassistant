@@ -19,8 +19,16 @@ from typing import Any
 
 import voluptuous as vol
 
-from homeassistant.config_entries import SOURCE_REAUTH, SOURCE_RECONFIGURE, ConfigEntry, ConfigFlowResult
+from homeassistant.config_entries import (
+    SOURCE_REAUTH,
+    SOURCE_RECONFIGURE,
+    ConfigEntry,
+    ConfigFlowResult,
+    OptionsFlow,
+    OptionsFlowWithReload,
+)
 from homeassistant.const import CONF_TOKEN, CONF_URL, CONF_VERIFY_SSL
+from homeassistant.core import callback
 from homeassistant.data_entry_flow import AbortFlow
 from homeassistant.helpers import config_entry_oauth2_flow
 from homeassistant.helpers.aiohttp_client import async_get_clientsession
@@ -34,7 +42,17 @@ from .api import (
     StockpotError,
     StockpotSslError,
 )
-from .const import AUTH_METHOD_OAUTH, CONF_AUTH_METHOD, CONF_HOUSEHOLD_ID, DOMAIN, STOCKPOT_URL
+from .const import (
+    AUTH_METHOD_OAUTH,
+    CONF_AUTH_METHOD,
+    CONF_HOUSEHOLD_ID,
+    CONF_PANEL_ADMIN_ONLY,
+    CONF_PANEL_ENABLED,
+    DEFAULT_PANEL_ADMIN_ONLY,
+    DEFAULT_PANEL_ENABLED,
+    DOMAIN,
+    STOCKPOT_URL,
+)
 from .oauth import (
     CONF_AUTH_IMPLEMENTATION,
     CONF_OAUTH_TOKEN,
@@ -84,6 +102,12 @@ class StockpotConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, dom
     def logger(self) -> logging.Logger:
         """Logger of the OAuth2 helper."""
         return _LOGGER
+
+    @staticmethod
+    @callback
+    def async_get_options_flow(config_entry: ConfigEntry) -> OptionsFlow:
+        """Options: the Stockpot panel in the sidebar (0.12.0)."""
+        return StockpotOptionsFlow()
 
     async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Straight to the sign-in on Stockpot. A form (no field) is shown only when the sign-in
@@ -367,3 +391,25 @@ class StockpotConfigFlow(config_entry_oauth2_flow.AbstractOAuth2FlowHandler, dom
             ),
             errors=errors,
         )
+
+
+class StockpotOptionsFlow(OptionsFlowWithReload):
+    """« Afficher le panneau » (on by default) and « Réservé aux administrateurs » (off by default).
+
+    The entry reloads on save, which registers or removes its panel. A manual-token entry may keep
+    the option on: it gets a repair issue suggesting the sign-in with Stockpot instead of a panel."""
+
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
+        """The two options."""
+        if user_input is not None:
+            return self.async_create_entry(data=user_input)
+        options = self.config_entry.options
+        schema = vol.Schema(
+            {
+                vol.Required(CONF_PANEL_ENABLED, default=options.get(CONF_PANEL_ENABLED, DEFAULT_PANEL_ENABLED)): bool,
+                vol.Required(
+                    CONF_PANEL_ADMIN_ONLY, default=options.get(CONF_PANEL_ADMIN_ONLY, DEFAULT_PANEL_ADMIN_ONLY)
+                ): bool,
+            }
+        )
+        return self.async_show_form(step_id="init", data_schema=schema)

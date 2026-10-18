@@ -388,5 +388,27 @@
         }
       }
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Panneau Stockpot",
+        "description": "Stockpot dans la barre latérale de Home Assistant, connecté avec le compte Stockpot qui a branché cette intégration (les actions faites dans le panneau sont faites en son nom). L’administration (réglages du foyer, personnes, compte) s’ouvre dans Stockpot.",
+        "data": {
+          "panel_enabled": "Afficher le panneau",
+          "panel_admin_only": "Réservé aux administrateurs"
+        },
+        "data_description": {
+          "panel_enabled": "Ajoute « Stockpot » à la barre latérale. Demande la connexion « Se connecter avec Stockpot », avec le panneau autorisé dans Stockpot.",
+          "panel_admin_only": "Seuls les administrateurs de Home Assistant voient le panneau."
+        }
+      }
+    }
+  },
+  "issues": {
+    "panel_requires_oauth": {
+      "title": "Le panneau Stockpot demande « Se connecter avec Stockpot »",
+      "description": "Le foyer « {title} » est connecté par un jeton manuel, qui ne peut pas ouvrir le panneau Stockpot. Ouvre Paramètres › Appareils et services › Stockpot › Reconfigurer, puis choisis « Se connecter avec Stockpot ». Ou désactive le panneau dans les options de l’intégration."
+    }
   }
 }

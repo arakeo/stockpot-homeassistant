@@ -22,6 +22,7 @@ from .oauth import (
     is_oauth_entry,
     oauth_token_provider,
 )
+from .panel import async_remove_entry_panel, async_setup_entry_panel, async_unload_entry_panel
 from .services import async_setup_services
 from .webhook import async_setup_webhook, async_unload_webhook
 
@@ -73,11 +74,18 @@ async def async_setup_entry(hass: HomeAssistant, entry: StockpotConfigEntry) -> 
 
     await async_setup_webhook(hass, entry)
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+    # Stockpot panel in the sidebar (0.12.0): OAuth entries, option « Afficher le panneau ». Optional:
+    # a panel that cannot be registered never takes the household's entities down with it.
+    try:
+        await async_setup_entry_panel(hass, entry)
+    except (RuntimeError, ValueError) as err:
+        _LOGGER.error("The Stockpot panel could not be registered: %s", err)
     return True
 
 
 async def async_unload_entry(hass: HomeAssistant, entry: StockpotConfigEntry) -> bool:
     """Unload a Stockpot household."""
+    async_unload_entry_panel(hass, entry)
     async_unload_webhook(hass, entry)
     return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)
 
@@ -86,7 +94,8 @@ async def async_remove_entry(hass: HomeAssistant, entry: StockpotConfigEntry) ->
     """Integration removed: ask Stockpot to stop sending the webhook (best effort).
 
     OAuth entry: revoke the refresh token (RFC 7009), which ends the whole Stockpot access,
-    its tokens and the webhook it registered."""
+    its tokens (the panel's included) and the webhook it registered."""
+    async_remove_entry_panel(hass, entry)
     data = dict(entry.data)
     if is_oauth_entry(data):
         token = data.get(CONF_OAUTH_TOKEN) or {}

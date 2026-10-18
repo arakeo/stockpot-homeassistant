@@ -221,6 +221,14 @@ def auto_enable_custom_integrations(enable_custom_integrations: None) -> None:
     """Load custom_components/stockpot."""
 
 
+@pytest.fixture(autouse=True)
+def frontend_loaded(hass: HomeAssistant) -> None:
+    """`frontend` / `panel_custom` (0.12.0 dependencies) count as set up: the real frontend needs
+    the home-assistant-frontend package, absent from the test environment. Registering a panel
+    only writes the frontend's panel registry."""
+    hass.config.components.update({"frontend", "panel_custom"})
+
+
 @pytest.fixture
 def summary() -> dict[str, Any]:
     """A copy of the summary payload."""

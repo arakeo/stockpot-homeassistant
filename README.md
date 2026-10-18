@@ -58,9 +58,22 @@ Les trois capteurs de santé sont indisponibles avec une version de Stockpot ant
 
 Interrogation toutes les 60 s, plus un **webhook** : au démarrage, l'intégration enregistre un webhook Home Assistant et donne son URL à Stockpot (accès du **propriétaire** du foyer ; pour un membre, Stockpot répond 403 et l'intégration se contente de l'interrogation). Stockpot n'appelle que les hôtes de sa variable `STOCKPOT_HA_WEBHOOK_HOSTS` et signe chaque notification (`X-Stockpot-Signature: sha256=HMAC(secret, "<timestamp>.<corps>")`, `X-Stockpot-Timestamp`, fenêtre de 5 min). Sans webhook, l'interrogation suffit.
 
+## Panneau Stockpot (0.12.0)
+
+**Stockpot entier dans la barre latérale** (entrée « Stockpot », icône `mdi:pot-steam`), sans connexion dans Home Assistant : dans un navigateur, dans l'application compagnon (Wi-Fi ou 4G), via `homeassistant.local`, une IP ou Nabu Casa. Exige Stockpot M18 ou plus récent.
+
+- **Activation** : case « Afficher Stockpot dans Home Assistant » sur l'écran de consentement de Stockpot (cochée par défaut), modifiable ensuite dans Stockpot › Réglages › Home Assistant. **Mise à jour** : une connexion faite avant Stockpot M18 a le panneau désactivé (le consentement d'alors ne le prévoyait pas) ; le panneau affiche « Panneau Stockpot désactivé » tant que la case n'est pas cochée dans Stockpot › Réglages › Home Assistant.
+- **Options de l'intégration** (Paramètres › Appareils et services › Stockpot › Configurer) : « Afficher le panneau » (oui par défaut), « Réservé aux administrateurs » (non par défaut : visible par tous les utilisateurs de Home Assistant).
+- **Compte** : les actions faites dans le panneau sont attribuées au compte Stockpot qui a connecté l'intégration, quel que soit l'utilisateur de Home Assistant.
+- **Périmètre** : toutes les données du foyer (recettes, articles, planning, courses, stock, scan, photo du stock, tickets, commandes), en lecture et écriture. L'administration (réglages du foyer, personnes, invitations, double authentification, jetons, connecteur Claude, coût de Claude, administration du catalogue) affiche « Ouvrir dans Stockpot » (nouvel onglet).
+- **Fonctionnement** : le panneau (`frontend/stockpot-panel.js`, élément `<stockpot-panel>`) contient une iframe de `<Stockpot>/embed`. Stockpot demande un code à usage unique (60 s) que le panneau obtient par la commande websocket `stockpot/panel/code` : l'intégration appelle `POST /api/v1/ha/panel-codes` avec son accès OAuth. Stockpot l'échange contre une session d'une heure, gardée en mémoire et renouvelée sans rien demander. Aucun cookie, aucun mot de passe dans Home Assistant. Les messages ne sont échangés qu'avec l'origine de Stockpot.
+- **Plusieurs foyers** : un panneau par entrée (`/stockpot`, puis `/stockpot_<id>`), titré « Stockpot · <foyer> ».
+- **Entrées à jeton manuel** : pas de panneau (Stockpot ne l'ouvre que pour une connexion OAuth). Une réparation propose « Reconfigurer › Se connecter avec Stockpot » ; désactiver le panneau dans les options la fait disparaître.
+- Si le panneau est désactivé côté Stockpot, il l'explique avec un lien vers les réglages de Stockpot.
+
 ## Carte « Page web » (iframe)
 
-Les vues `/ha/planning`, `/ha/courses`, `/ha/stock` de Stockpot s'affichent dans une carte `type: iframe` (`allow: "camera; fullscreen"`) **seulement dans un navigateur déjà connecté à Stockpot sur le même site** (ex. `ha.arakeo.com` / `stockpot.arakeo.com`) : pas dans l'application compagnon, ni via `homeassistant.local`, une IP ou Nabu Casa. Dans l'application compagnon, utilisez les entités de l'intégration.
+Préférez le **panneau Stockpot** ci-dessus. Les vues `/ha/planning`, `/ha/courses`, `/ha/stock` de Stockpot s'affichent dans une carte `type: iframe` (`allow: "camera; fullscreen"`) **seulement dans un navigateur déjà connecté à Stockpot sur le même site** (ex. `ha.arakeo.com` / `stockpot.arakeo.com`) : pas dans l'application compagnon, ni via `homeassistant.local`, une IP ou Nabu Casa. Dans l'application compagnon, utilisez les entités de l'intégration.
 
 ## Exemples
 

@@ -43,3 +43,17 @@ SERVICE_ADD_TO_SHOPPING_LIST: Final = "add_to_shopping_list"
 SERVICE_PLAN_MEAL: Final = "plan_meal"
 SERVICE_COOK_MEAL: Final = "cook_meal"
 SERVICE_GENERATE_SHOPPING_LIST: Final = "generate_shopping_list"
+
+# Stockpot panel in the sidebar (0.12.0, Stockpot M18): Stockpot itself, in an iframe of /embed,
+# opened with a single-use code the integration gets with its OAuth access (no sign-in in HA).
+CONF_PANEL_ENABLED: Final = "panel_enabled"
+CONF_PANEL_ADMIN_ONLY: Final = "panel_admin_only"
+DEFAULT_PANEL_ENABLED: Final = True
+DEFAULT_PANEL_ADMIN_ONLY: Final = False
+PANEL_URL_PATH: Final = "stockpot"
+PANEL_COMPONENT: Final = "stockpot-panel"
+PANEL_ICON: Final = "mdi:pot-steam"
+PANEL_TITLE: Final = "Stockpot"
+PANEL_STATIC_URL: Final = "/stockpot_static"
+PANEL_MODULE: Final = "stockpot-panel.js"
+WS_PANEL_CODE: Final = "stockpot/panel/code"
