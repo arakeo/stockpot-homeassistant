@@ -25,6 +25,12 @@ Le jeton `ha` est **lié à un foyer** et ne donne que ce qu'utilise l'intégrat
 | `sensor.<foyer>_peremptions_proches` | produits périmés ou bientôt, liste en attribut `products` |
 | `sensor.<foyer>_prochain_repas` | recette ou note, attributs `servings`, `present`, `starts_at` |
 | `binary_sensor.<foyer>_commande_drive_a_passer` | liste non vide et jour de commande Drive atteint |
+| `binary_sensor.<foyer>_commande_a_recuperer` | commande Drive passée en attente de retrait (attributs `order_number`, `pickup_at`, `lines_count`, `total`) |
+| `sensor.<foyer>_sante_de_stockpot` (diagnostic) | `ok` / `degraded` (Stockpot M14+) |
+| `sensor.<foyer>_taches_en_echec_24_h` (diagnostic) | jobs en échec sur 24 h, toute l'instance (Stockpot M14+) |
+| `sensor.<foyer>_cout_claude_du_mois` | coût Claude estimé du foyer pour le mois en cours, en USD ; attributs `cap_usd` (plafond du foyer, `null` sans plafond) et `blocked` (appels Claude refusés) (Stockpot M14+) |
+
+Les trois capteurs de santé sont indisponibles avec une version de Stockpot antérieure à M14 (pas de bloc `health`).
 
 ## Actions
 

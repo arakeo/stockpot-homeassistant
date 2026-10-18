@@ -97,6 +97,20 @@
       },
       "next_meal": {
         "name": "Next meal"
+      },
+      "health": {
+        "name": "Stockpot health",
+        "state": {
+          "ok": "OK",
+          "degraded": "Degraded"
+        }
+      },
+      "failed_jobs": {
+        "name": "Failed jobs (24 h)",
+        "unit_of_measurement": "jobs"
+      },
+      "llm_cost_month": {
+        "name": "Claude cost this month"
       }
     },
     "todo": {

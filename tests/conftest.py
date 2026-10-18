@@ -114,6 +114,13 @@ SUMMARY: dict[str, Any] = {
         },
     ],
     "stock_counts": {"low_stock": 1, "expiring": 1, "expired": 0},
+    "health": {
+        "status": "ok",
+        "failed_jobs_24h": 0,
+        "llm_cost_month_usd": 1.2345,
+        "llm_cap_usd": 20.0,
+        "llm_blocked": False,
+    },
     "timezone": "Europe/Paris",
     "generated_at": "2026-10-14T09:00:00+02:00",
 }

@@ -97,6 +97,20 @@
       },
       "next_meal": {
         "name": "Prochain repas"
+      },
+      "health": {
+        "name": "Santé de Stockpot",
+        "state": {
+          "ok": "OK",
+          "degraded": "Dégradée"
+        }
+      },
+      "failed_jobs": {
+        "name": "Tâches en échec (24 h)",
+        "unit_of_measurement": "tâches"
+      },
+      "llm_cost_month": {
+        "name": "Coût Claude du mois"
       }
     },
     "todo": {

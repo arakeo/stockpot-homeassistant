@@ -1,4 +1,4 @@
-"""Sensors: items to buy, low stock, expiring products, next meal."""
+"""Sensors: items to buy, low stock, expiring products, next meal, Stockpot health."""
 
 from __future__ import annotations
 
@@ -6,7 +6,13 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-from homeassistant.components.sensor import SensorEntity, SensorEntityDescription
+from homeassistant.components.sensor import (
+    SensorDeviceClass,
+    SensorEntity,
+    SensorEntityDescription,
+    SensorStateClass,
+)
+from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddConfigEntryEntitiesCallback
 
@@ -21,7 +27,8 @@ class StockpotSensorDescription(SensorEntityDescription):
     """A Stockpot sensor."""
 
     value: Callable[[StockpotData], Any]
-    attributes: Callable[[StockpotData], dict[str, Any]]
+    attributes: Callable[[StockpotData], dict[str, Any]] = lambda _: {}
+    exists: Callable[[StockpotData], bool] = lambda _: True
 
 
 def _shopping(data: StockpotData) -> dict[str, Any]:
@@ -40,6 +47,33 @@ def _next_meal_attributes(data: StockpotData) -> dict[str, Any]:
         "recipe_id": meal["recipe"]["id"] if meal.get("recipe") else None,
         "servings": float(meal["servings"]),
         "present": [m["first_name"] for m in meal.get("members", [])],
+    }
+
+
+def _health(data: StockpotData) -> dict[str, Any] | None:
+    """Health block of the summary (absent before Stockpot M14)."""
+    health = data.summary.get("health")
+    return health if isinstance(health, dict) else None
+
+
+def _has_health(data: StockpotData) -> bool:
+    return _health(data) is not None
+
+
+def _health_value(key: str, cast: Callable[[Any], Any]) -> Callable[[StockpotData], Any]:
+    def value(data: StockpotData) -> Any:
+        raw = (_health(data) or {}).get(key)
+        return None if raw is None else cast(raw)
+
+    return value
+
+
+def _llm_cost_attributes(data: StockpotData) -> dict[str, Any]:
+    health = _health(data) or {}
+    cap = health.get("llm_cap_usd")
+    return {
+        "cap_usd": None if cap is None else float(cap),
+        "blocked": bool(health.get("llm_blocked")),
     }
 
 
@@ -79,6 +113,36 @@ SENSORS: tuple[StockpotSensorDescription, ...] = (
         value=lambda d: (d.summary.get("next_meal") or {}).get("title") or None,
         attributes=_next_meal_attributes,
     ),
+    # Stockpot health (M14). Older versions send no `health` block: these sensors are unavailable.
+    StockpotSensorDescription(
+        key="health",
+        translation_key="health",
+        device_class=SensorDeviceClass.ENUM,
+        options=["ok", "degraded"],
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value=_health_value("status", str),
+        exists=_has_health,
+    ),
+    StockpotSensorDescription(
+        key="failed_jobs",
+        translation_key="failed_jobs",
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        value=_health_value("failed_jobs_24h", int),
+        exists=_has_health,
+    ),
+    StockpotSensorDescription(
+        key="llm_cost_month",
+        translation_key="llm_cost_month",
+        device_class=SensorDeviceClass.MONETARY,
+        native_unit_of_measurement="USD",
+        # Monetary sensors accept `total` (not `measurement`); the sum restarts each calendar month.
+        state_class=SensorStateClass.TOTAL,
+        suggested_display_precision=2,
+        value=_health_value("llm_cost_month_usd", float),
+        attributes=_llm_cost_attributes,
+        exists=_has_health,
+    ),
 )
 
 
@@ -104,6 +168,11 @@ class StockpotSensor(StockpotEntity, SensorEntity):
         """Create the sensor."""
         super().__init__(coordinator, description.key)
         self.entity_description = description
+
+    @property
+    def available(self) -> bool:
+        """Unavailable when the Stockpot version does not send the sensor's data."""
+        return super().available and self.entity_description.exists(self.coordinator.data)
 
     @property
     def native_value(self) -> Any:

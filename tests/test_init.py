@@ -58,7 +58,7 @@ async def test_entities_are_created(hass: HomeAssistant, setup_integration: Mock
     assert hass.states.get("calendar.foyer_martin_breakfast") is None
 
     registry = er.async_get(hass)
-    assert len(er.async_entries_for_config_entry(registry, setup_integration.entry_id)) == 10
+    assert len(er.async_entries_for_config_entry(registry, setup_integration.entry_id)) == 13
 
 
 async def test_stale_list_is_reported(
