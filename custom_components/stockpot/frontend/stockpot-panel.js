@@ -120,7 +120,9 @@ class StockpotPanel extends HTMLElement {
     if (!this.isConnected || !origin || this._iframe) return;
     const style = document.createElement("style");
     style.textContent = `
-      :host { display: block; height: 100%; background: var(--primary-background-color); }
+      /* ha-panel-custom gives its child an automatic height, so 100% would collapse the iframe
+         to its 150 px default: size the panel on the viewport instead (dvh for mobile toolbars). */
+      :host { display: block; height: 100vh; height: 100dvh; overflow: hidden; background: var(--primary-background-color); }
       iframe { display: block; width: 100%; height: 100%; border: 0; }
       .notice { box-sizing: border-box; max-width: 560px; margin: 48px auto; padding: 24px; font-family: var(--paper-font-body1_-_font-family, sans-serif); color: var(--primary-text-color); }
       .notice h1 { font-size: 1.4rem; margin: 0 0 12px; }

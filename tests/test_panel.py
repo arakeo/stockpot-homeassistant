@@ -49,7 +49,7 @@ async def test_oauth_entry_registers_the_panel_and_unload_removes_it(
     custom = panel.config["_panel_custom"]
     assert custom["name"] == "stockpot-panel"
     assert custom["embed_iframe"] is False
-    assert custom["module_url"].startswith("/stockpot_static/stockpot-panel.js?v=0.12.0")
+    assert custom["module_url"].startswith("/stockpot_static/stockpot-panel.js?v=0.12.1")
     assert panel.config["entry_id"] == oauth_config_entry.entry_id
     assert panel.config["url"] == URL
     assert panel.config["origin"] == URL
@@ -230,3 +230,15 @@ def test_panel_module_is_shipped_and_keeps_to_the_protocol() -> None:
     assert "/embed" in source
     assert "set narrow(" in source
     assert "panel_disabled" in source
+
+
+def test_panel_module_sizes_itself_on_the_viewport() -> None:
+    """ha-panel-custom gives the element an automatic height: a percentage would collapse the
+    iframe to its 150 px default (0.12.1)."""
+    from pathlib import Path
+
+    js = (Path(__file__).parents[1] / "custom_components" / "stockpot" / "frontend" / "stockpot-panel.js").read_text(
+        encoding="utf-8"
+    )
+    assert "height: 100dvh" in js
+    assert "height: 100vh" in js
