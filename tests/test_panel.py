@@ -49,7 +49,7 @@ async def test_oauth_entry_registers_the_panel_and_unload_removes_it(
     custom = panel.config["_panel_custom"]
     assert custom["name"] == "stockpot-panel"
     assert custom["embed_iframe"] is False
-    assert custom["module_url"].startswith("/stockpot_static/stockpot-panel.js?v=0.12.1")
+    assert custom["module_url"].startswith("/stockpot_static/stockpot-panel.js?v=0.13.0")
     assert panel.config["entry_id"] == oauth_config_entry.entry_id
     assert panel.config["url"] == URL
     assert panel.config["origin"] == URL

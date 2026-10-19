@@ -52,7 +52,7 @@ Les trois capteurs de santé sont indisponibles avec une version de Stockpot ant
 
 ## Actions
 
-`stockpot.consume_product`, `stockpot.add_stock` (par `ean` — quantité en conditionnements — ou `product_id`), `stockpot.add_to_shopping_list`, `stockpot.plan_meal`, `stockpot.cook_meal`, `stockpot.generate_shopping_list`. Chaque action envoie une clé `Idempotency-Key` neuve, réutilisée pour au plus 2 nouvelles tentatives (délai dépassé, erreur réseau, 5xx) : Stockpot ne l'applique jamais deux fois.
+`stockpot.consume_product`, `stockpot.add_stock` (par `ean` — quantité en conditionnements — ou `product_id` ; depuis la 0.13.0, un `ean` envoie aussi l'**article** de cet EAN, pour que le stock connaisse la marque et le format — Stockpot M20b ; un article archivé est refusé pour un ajout seulement), `stockpot.add_to_shopping_list` (par `ean` : l'article scanné devient l'article préféré de la ligne, sauf s'il est archivé), `stockpot.plan_meal`, `stockpot.cook_meal`, `stockpot.generate_shopping_list`. Chaque action envoie une clé `Idempotency-Key` neuve, réutilisée pour au plus 2 nouvelles tentatives (délai dépassé, erreur réseau, 5xx) : Stockpot ne l'applique jamais deux fois.
 
 ## Rafraîchissement
 

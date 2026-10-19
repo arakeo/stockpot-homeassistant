@@ -37,6 +37,23 @@ BARCODE = {
 }
 
 
+# Stockpot ≥ M20a: the EAN names its article (0.13.0 sends its id).
+BARCODE_ARTICLE = {
+    "data": {
+        **BARCODE["data"],
+        "article": {
+            "id": 31,
+            "ean": "3033490004743",
+            "name": None,
+            "brand": "Président",
+            "pack_quantity": "250.000",
+            "pack_unit_id": 1,
+            "archived": False,
+        },
+    }
+}
+
+
 def _calls(mock: AiohttpClientMocker, method: str, path: str) -> list[tuple]:
     return [c for c in mock.mock_calls if c[0].lower() == method.lower() and str(c[1]).startswith(API + path)]
 
@@ -64,6 +81,41 @@ async def test_consume_product_by_barcode(
         "shortfall": "0.000",
         "stock_quantity": "250.000",
     }
+
+
+async def test_barcode_actions_send_the_article(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_api: AiohttpClientMocker
+) -> None:
+    """0.13.0 (Stockpot M20b): consume / add_stock by EAN send the article of the EAN with its product;
+    add_to_shopping_list makes it the line's preferred article, unless it is archived."""
+    mock_api.get(f"{API}/ha/barcodes/3033490004743", json=BARCODE_ARTICLE)
+    mock_api.post(f"{API}/stock/consume", status=201, json=MOVEMENT)
+    mock_api.post(f"{API}/stock/purchase", status=201, json=MOVEMENT)
+    mock_api.post(f"{API}/shopping-lists/1/items", status=201, json={"data": {"id": 111, "name": "Beurre"}})
+
+    await hass.services.async_call(DOMAIN, "consume_product", {"ean": "3033490004743"}, blocking=True)
+    await hass.services.async_call(DOMAIN, "add_stock", {"ean": "3033490004743", "quantity": 2}, blocking=True)
+    await hass.services.async_call(DOMAIN, "add_to_shopping_list", {"ean": "3033490004743"}, blocking=True)
+
+    (consume,) = _calls(mock_api, "post", "/stock/consume")
+    assert consume[2] == {"product_id": 3, "article_id": 31, "quantity": "250", "unit_id": 1}
+    (purchase,) = _calls(mock_api, "post", "/stock/purchase")
+    assert purchase[2] == {"product_id": 3, "article_id": 31, "quantity": "500", "unit_id": 1}
+    (item,) = _calls(mock_api, "post", "/shopping-lists/1/items")
+    assert item[2] == {"product_id": 3, "article_id": 31}
+
+
+async def test_archived_article_is_not_the_preferred_one(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_api: AiohttpClientMocker
+) -> None:
+    """An archived article is still consumed by its id, but never set as a line's preferred article."""
+    article = {**BARCODE_ARTICLE["data"]["article"], "archived": True}
+    archived = {"data": {**BARCODE_ARTICLE["data"], "article": article}}
+    mock_api.get(f"{API}/ha/barcodes/3033490004743", json=archived)
+    mock_api.post(f"{API}/shopping-lists/1/items", status=201, json={"data": {"id": 112, "name": "Beurre"}})
+    await hass.services.async_call(DOMAIN, "add_to_shopping_list", {"ean": "3033490004743"}, blocking=True)
+    (item,) = _calls(mock_api, "post", "/shopping-lists/1/items")
+    assert item[2] == {"product_id": 3}
 
 
 async def test_consume_product_by_id(

@@ -122,23 +122,31 @@ async def _api(coro) -> Any:
 
 
 async def _product_quantity(entry: StockpotConfigEntry, data: dict[str, Any]) -> dict[str, Any]:
-    """`{product_id, quantity, unit_id?}` from an EAN (quantity = packs) or a product id."""
+    """`{product_id, article_id?, quantity, unit_id?}` from an EAN (quantity = packs) or a product id.
+
+    Since 0.13.0 (Stockpot M20b) an EAN names its ARTICLE: its id is sent with the product, so the
+    stock knows the brand and format (an archived article is refused by Stockpot for a purchase only).
+    """
     client = entry.runtime_data.client
     if "ean" in data:
         barcode = await _api(client.barcode(data["ean"]))
         packs = data.get("quantity", 1)
+        article = _article_id(barcode)
         if barcode.get("pack_quantity") and barcode.get("pack_unit"):
-            return {
+            result = {
                 "product_id": barcode["product"]["id"],
                 "quantity": _decimal(packs * float(barcode["pack_quantity"])),
                 "unit_id": barcode["pack_unit"]["id"],
                 "_name": barcode["product"]["name"],
             }
-        result = {
-            "product_id": barcode["product"]["id"],
-            "quantity": _decimal(packs),
-            "_name": barcode["product"]["name"],
-        }
+        else:
+            result = {
+                "product_id": barcode["product"]["id"],
+                "quantity": _decimal(packs),
+                "_name": barcode["product"]["name"],
+            }
+        if article is not None:
+            result["article_id"] = article
     elif "product_id" in data:
         if "quantity" not in data:
             raise ServiceValidationError(translation_domain=DOMAIN, translation_key="quantity_required")
@@ -148,6 +156,14 @@ async def _product_quantity(entry: StockpotConfigEntry, data: dict[str, Any]) ->
     if "unit_id" in data:
         result["unit_id"] = data["unit_id"]
     return result
+
+
+def _article_id(barcode: dict[str, Any]) -> int | None:
+    """The article of an EAN (Stockpot ≥ M20a answers `article`; older servers do not)."""
+    article = barcode.get("article")
+    if isinstance(article, dict) and isinstance(article.get("id"), int):
+        return article["id"]
+    return None
 
 
 def _movement_response(response: dict[str, Any], name: str | None) -> dict[str, Any]:
@@ -194,7 +210,13 @@ def async_setup_services(hass: HomeAssistant) -> None:
         list_id = call.data.get("list_id") or runtime.coordinator.data.summary["shopping"]["main_list_id"]
         payload: dict[str, Any] = {}
         if "ean" in call.data:
-            payload["product_id"] = (await _api(runtime.client.barcode(call.data["ean"])))["product"]["id"]
+            barcode = await _api(runtime.client.barcode(call.data["ean"]))
+            payload["product_id"] = barcode["product"]["id"]
+            # 0.13.0: the scanned article becomes the line's preferred article (brand, format),
+            # unless it is archived.
+            article = _article_id(barcode)
+            if article is not None and not barcode["article"].get("archived"):
+                payload["article_id"] = article
         elif "product_id" in call.data:
             payload["product_id"] = call.data["product_id"]
         elif "label" in call.data:
