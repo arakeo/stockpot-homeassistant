@@ -35,6 +35,20 @@ async def test_items(hass: HomeAssistant, setup_integration: MockConfigEntry) ->
     assert items[0]["description"] == "2 × 250 g · For: Pâte brisée"
 
 
+async def test_items_never_include_suggestions(
+    hass: HomeAssistant, setup_integration: MockConfigEntry, mock_api: AiohttpClientMocker
+) -> None:
+    """Low stock and habits are suggestions (ADR 0026, ADR 0028): an article under its minimum
+    (« Lait » in the summary) is not a to-do item until someone accepts it in Stockpot; the
+    integration never reads the suggestions."""
+    result = await hass.services.async_call(
+        TODO_DOMAIN, "get_items", {ATTR_ENTITY_ID: ENTITY}, blocking=True, return_response=True
+    )
+    assert "Lait" in [p["name"] for p in SUMMARY["low_stock"]]
+    assert "Lait" not in [i["summary"] for i in result[ENTITY]["items"]]
+    assert not [c for c in mock_api.mock_calls if "shopping-suggestions" in str(c[1])]
+
+
 async def test_add_item(hass: HomeAssistant, setup_integration: MockConfigEntry, mock_api: AiohttpClientMocker) -> None:
     """Adding creates a free text line in the list."""
     mock_api.post(f"{API}/shopping-lists/1/items", status=201, json={"data": {"id": 104, "name": "Lait"}})
